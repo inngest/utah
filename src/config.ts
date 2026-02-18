@@ -3,7 +3,7 @@ import { resolve } from "path";
 export const config = {
   agent: {
     name: process.env.AGENT_NAME || "Utah",
-    model: process.env.AGENT_MODEL || "claude-opus-4-20250618",
+    model: process.env.AGENT_MODEL || "claude-opus-4-6",
   },
 
   workspace: {
