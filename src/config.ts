@@ -22,6 +22,15 @@ export const config = {
     maxIterations: 20,
   },
 
+  compaction: {
+    // Estimated token limit before compaction triggers
+    maxTokens: 150_000,
+    // Compact when estimated tokens exceed this fraction of maxTokens
+    threshold: 0.8,
+    // Keep this many estimated tokens of recent messages verbatim
+    keepRecentTokens: 20_000,
+  },
+
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || "",
     allowedChatIds: (process.env.TELEGRAM_ALLOWED_CHATS || "")
