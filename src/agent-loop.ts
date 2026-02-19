@@ -1,38 +1,28 @@
 /**
- * Agent Loop — the core think → act → observe cycle.
+ * Agent Loop — the core think → act → observe cycle, powered by pi-ai.
  *
  * Each iteration:
- * 1. Call the LLM with conversation history + tools
- * 2. If the LLM wants tools, execute them as Inngest steps
+ * 1. Call the LLM via pi-ai's complete() with conversation history + tools
+ * 2. If the LLM wants tools, validate args with pi-ai and execute as Inngest steps
  * 3. Feed results back into the conversation
  * 4. Repeat until the LLM responds with text (no tools) or max iterations
  *
  * Every LLM call and tool execution is an Inngest step —
  * giving you durability, retries, and observability for free.
+ *
+ * pi-ai differences from raw Anthropic API:
+ * - Unified Message/Tool types that work across providers
+ * - TypeBox schemas for tool parameters (validated at runtime)
+ * - Content blocks use "toolCall" / "toolResult" instead of "tool_use" / "tool_result"
  */
 
 import { config } from "./config.ts";
-import { callAnthropic, type LLMToolCall } from "./lib/llm.ts";
+import { callLLM, validateToolArguments, type Message } from "./lib/llm.ts";
 import { TOOLS, executeTool } from "./lib/tools.ts";
 import { buildSystemPrompt } from "./lib/context.ts";
 import { loadSession } from "./lib/session.ts";
 
 // --- Types ---
-
-interface Message {
-  role: "user" | "assistant";
-  content: string | ContentBlock[];
-}
-
-interface ContentBlock {
-  type: string;
-  text?: string;
-  id?: string;
-  name?: string;
-  input?: unknown;
-  tool_use_id?: string;
-  content?: string;
-}
 
 export interface AgentRunResult {
   response: string;
@@ -47,6 +37,9 @@ export interface AgentRunResult {
  * Two-tier pruning inspired by OpenClaw/pi-agent-core:
  * - Soft trim: keep head + tail of old tool results
  * - Hard clear: replace entirely when total context is huge
+ *
+ * pi-ai uses "toolResult" content blocks with a content array,
+ * different from Anthropic's raw "tool_result" format.
  */
 const PRUNING = {
   keepLastAssistantTurns: 3,
@@ -67,11 +60,12 @@ function pruneOldToolResults(messages: Message[]) {
 
   let totalToolChars = 0;
   for (let i = 0; i < pruneUpTo; i++) {
-    const msg = messages[i];
-    if (!Array.isArray(msg.content)) continue;
-    for (const block of msg.content) {
-      if (block.type === "tool_result" && typeof block.content === "string") {
-        totalToolChars += block.content.length;
+    const msg = messages[i] as any;
+    if (msg.role !== "toolResult") continue;
+    const content = Array.isArray(msg.content) ? msg.content : [];
+    for (const block of content) {
+      if (block.type === "text" && typeof block.text === "string") {
+        totalToolChars += block.text.length;
       }
     }
   }
@@ -79,16 +73,17 @@ function pruneOldToolResults(messages: Message[]) {
   const useHardClear = totalToolChars > PRUNING.hardClear.threshold;
 
   for (let i = 0; i < pruneUpTo; i++) {
-    const msg = messages[i];
-    if (!Array.isArray(msg.content)) continue;
-    for (const block of msg.content) {
-      if (block.type === "tool_result" && typeof block.content === "string") {
+    const msg = messages[i] as any;
+    if (msg.role !== "toolResult") continue;
+    const content = Array.isArray(msg.content) ? msg.content : [];
+    for (const block of content) {
+      if (block.type === "text" && typeof block.text === "string") {
         if (useHardClear) {
-          block.content = PRUNING.hardClear.placeholder;
-        } else if (block.content.length > PRUNING.softTrim.maxChars) {
-          const head = block.content.slice(0, PRUNING.softTrim.headChars);
-          const tail = block.content.slice(-PRUNING.softTrim.tailChars);
-          block.content = `${head}\n\n... [${block.content.length - PRUNING.softTrim.headChars - PRUNING.softTrim.tailChars} chars trimmed] ...\n\n${tail}`;
+          block.text = PRUNING.hardClear.placeholder;
+        } else if (block.text.length > PRUNING.softTrim.maxChars) {
+          const head = block.text.slice(0, PRUNING.softTrim.headChars);
+          const tail = block.text.slice(-PRUNING.softTrim.tailChars);
+          block.text = `${head}\n\n... [${block.text.length - PRUNING.softTrim.headChars - PRUNING.softTrim.tailChars} chars trimmed] ...\n\n${tail}`;
         }
       }
     }
@@ -115,6 +110,7 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
       return await loadSession(sessionKey);
     });
 
+    // Build message array in pi-ai format
     const messages: Message[] = [
       ...history.map((h: { role: string; content: string }) => ({
         role: h.role as "user" | "assistant",
@@ -148,49 +144,53 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
         ? [...messages, { role: "user" as const, content: budgetWarning }]
         : messages;
 
-      // Think: call the LLM
+      // Think: call the LLM via pi-ai
       const llmResponse = await step.run("think", async () => {
-        return await callAnthropic(systemPrompt, messagesForLLM, TOOLS);
+        return await callLLM(systemPrompt, messagesForLLM, TOOLS);
       });
 
-      const toolCalls = llmResponse.toolCalls as LLMToolCall[];
+      const toolCalls = llmResponse.toolCalls;
 
       if (toolCalls.length > 0) {
-        // Build assistant message with tool_use blocks
-        const assistantContent: ContentBlock[] = [];
-        if (llmResponse.text) {
-          assistantContent.push({ type: "text", text: llmResponse.text });
-        }
-        for (const tc of toolCalls) {
-          assistantContent.push({
-            type: "tool_use",
-            id: tc.id,
-            name: tc.name,
-            input: tc.input,
-          });
-        }
-        messages.push({ role: "assistant", content: assistantContent });
+        // Add the full assistant content (text + tool calls) as returned by pi-ai
+        messages.push({
+          role: "assistant" as const,
+          content: llmResponse.content,
+        });
 
         // Act: execute each tool as a step
-        const toolResults: ContentBlock[] = [];
         for (const tc of toolCalls) {
           totalToolCalls++;
-          const result = await step.run(`tool-${tc.name}`, async () => {
-            return await executeTool(tc.name, tc.input as Record<string, unknown>);
-          });
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: tc.id,
-            content: result.result,
-          });
-        }
 
-        // Observe: feed results back
-        messages.push({ role: "user", content: toolResults });
+          const toolResult = await step.run(`tool-${tc.name}`, async () => {
+            // Validate arguments using pi-ai's TypeBox validation
+            const tool = TOOLS.find((t) => t.name === tc.name);
+            if (tool) {
+              validateToolArguments(tool, { name: tc.name, id: tc.id, arguments: tc.arguments });
+            }
+            return await executeTool(tc.name, tc.arguments);
+          });
+
+          // Observe: feed result back in pi-ai's toolResult format
+          messages.push({
+            role: "toolResult" as const,
+            toolCallId: tc.id,
+            toolName: tc.name,
+            content: [{ type: "text" as const, text: toolResult.result }],
+            isError: toolResult.error || false,
+          } as any);
+        }
       } else if (llmResponse.text) {
         // No tools — text response IS the reply
         finalResponse = llmResponse.text;
         done = true;
+      }
+
+      // Log iteration
+      if (llmResponse.usage) {
+        console.log(
+          `[loop] iter=${iterations} tools=${toolCalls.length} tokens=${llmResponse.usage.input || "?"}in/${llmResponse.usage.output || "?"}out cost=$${llmResponse.usage.cost?.total?.toFixed(4) || "?"}`
+        );
       }
     }
 
@@ -202,7 +202,7 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
       response: finalResponse,
       iterations,
       toolCalls: totalToolCalls,
-      model: config.agent.model,
+      model: `${config.llm.provider}/${config.llm.model}`,
     };
   };
 }

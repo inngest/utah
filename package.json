@@ -1,7 +1,7 @@
 {
   "name": "inngest-agent-example",
   "version": "1.0.0",
-  "description": "A durable AI agent built with Inngest — think/act/observe loop, Telegram integration, local development via connect()",
+  "description": "A durable AI agent built with Inngest + pi-ai — think/act/observe loop, Telegram integration, local development via connect()",
   "type": "module",
   "scripts": {
     "dev": "INNGEST_DEV=1 node --env-file=.env --experimental-strip-types --experimental-transform-types --no-warnings src/worker.ts",
@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mariozechner/pi-ai": "latest",
+    "@sinclair/typebox": "^0.34.0",
     "express": "^5.1.0",
     "inngest": "^3.51.0"
   },

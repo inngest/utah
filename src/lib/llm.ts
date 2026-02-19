@@ -1,79 +1,65 @@
 /**
- * LLM — thin wrapper around the Anthropic Messages API.
- * No SDK dependency. Just fetch.
+ * LLM — wrapper around pi-ai's complete() function.
+ *
+ * pi-ai provides a unified interface for multiple LLM providers
+ * (Anthropic, OpenAI, Google) with TypeBox-based tool validation.
  */
 
+import { getModel, complete, validateToolArguments } from "@mariozechner/pi-ai";
+import type { Tool, Message } from "@mariozechner/pi-ai";
 import { config } from "../config.ts";
 
-export interface LLMToolCall {
-  id: string;
-  name: string;
-  input: unknown;
+export type { Tool, Message };
+export { validateToolArguments };
+
+let _model: ReturnType<typeof getModel> | null = null;
+
+export function getConfiguredModel() {
+  if (!_model) {
+    _model = getModel(config.llm.provider, config.llm.model);
+  }
+  return _model;
 }
 
 export interface LLMResponse {
   text: string;
-  toolCalls: LLMToolCall[];
+  toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  content: any[];
+  usage?: { input?: number; output?: number; cost?: { total?: number } };
+  stopReason?: string;
 }
 
-interface Tool {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-}
-
-export async function callAnthropic(
+export async function callLLM(
   system: string,
-  messages: Array<{ role: string; content: unknown }>,
+  messages: Message[],
   tools: Tool[],
 ): Promise<LLMResponse> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": config.llm.anthropicKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: config.agent.model,
-      max_tokens: config.llm.maxTokens,
-      system,
-      messages,
-      tools: tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        input_schema: t.parameters,
-      })),
-    }),
-    signal: AbortSignal.timeout(60_000),
+  const model = getConfiguredModel();
+
+  const result = await complete(model, {
+    systemPrompt: system,
+    messages,
+    tools,
   });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Anthropic API ${res.status}: ${body.slice(0, 200)}`);
-  }
+  const text = result.content
+    .filter((c: any) => c.type === "text")
+    .map((c: any) => c.text)
+    .join("");
 
-  const data = (await res.json()) as {
-    content: Array<{
-      type: string;
-      text?: string;
-      id?: string;
-      name?: string;
-      input?: unknown;
-    }>;
-  };
+  const toolCalls = result.content
+    .filter((c: any) => c.type === "toolCall")
+    .map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      arguments: c.arguments || {},
+    }));
 
   return {
-    text: data.content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text || "")
-      .join(""),
-    toolCalls: data.content
-      .filter((b) => b.type === "tool_use")
-      .map((b) => ({
-        id: b.id || crypto.randomUUID(),
-        name: b.name || "",
-        input: b.input || {},
-      })),
+    text,
+    toolCalls,
+    content: result.content,
+    usage: result.usage,
+    stopReason: result.stopReason,
   };
 }

@@ -3,7 +3,6 @@ import { resolve } from "path";
 export const config = {
   agent: {
     name: process.env.AGENT_NAME || "Utah",
-    model: process.env.AGENT_MODEL || "claude-opus-4-6",
   },
 
   workspace: {
@@ -12,8 +11,11 @@ export const config = {
   },
 
   llm: {
-    anthropicKey: process.env.ANTHROPIC_API_KEY || "",
-    maxTokens: 4096,
+    // pi-ai provider/model format — supports "anthropic", "openai", "google"
+    provider: (process.env.LLM_PROVIDER || "anthropic") as "anthropic" | "openai" | "google",
+    model: process.env.AGENT_MODEL || "claude-sonnet-4-20250514",
+    // API keys are read from env by pi-ai automatically:
+    //   ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY
   },
 
   loop: {
