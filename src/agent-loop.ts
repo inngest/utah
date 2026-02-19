@@ -21,6 +21,7 @@ import { callLLM, validateToolArguments, type Message } from "./lib/llm.ts";
 import { TOOLS, executeTool } from "./lib/tools.ts";
 import { buildSystemPrompt } from "./lib/context.ts";
 import { loadSession } from "./lib/session.ts";
+import { shouldCompact, runCompaction } from "./lib/compaction.ts";
 
 // --- Types ---
 
@@ -106,9 +107,16 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
     const systemPrompt = buildSystemPrompt();
 
     // Load conversation history
-    const history = await step.run("load-history", async () => {
+    let history = await step.run("load-history", async () => {
       return await loadSession(sessionKey);
     });
+
+    // Compact if conversation is getting too long
+    if (shouldCompact(history)) {
+      history = await step.run("compact", async () => {
+        return await runCompaction(history, sessionKey);
+      });
+    }
 
     // Build message array in pi-ai format
     const messages: Message[] = [

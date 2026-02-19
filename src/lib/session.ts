@@ -5,7 +5,7 @@
  * messages are read for context. Simple, portable, inspectable.
  */
 
-import { readFile, appendFile, mkdir } from "fs/promises";
+import { readFile, writeFile, appendFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { config } from "../config.ts";
@@ -49,4 +49,17 @@ export async function appendToSession(
   await mkdir(dirname(path), { recursive: true });
   const msg: SessionMessage = { role, content, timestamp: new Date().toISOString(), metadata };
   await appendFile(path, JSON.stringify(msg) + "\n", "utf-8");
+}
+
+/**
+ * Rewrite the entire session file (used after compaction).
+ */
+export async function writeSession(
+  sessionKey: string,
+  messages: SessionMessage[],
+): Promise<void> {
+  const path = sessionPath(sessionKey);
+  await mkdir(dirname(path), { recursive: true });
+  const content = messages.map((m) => JSON.stringify(m)).join("\n") + "\n";
+  await writeFile(path, content, "utf-8");
 }
