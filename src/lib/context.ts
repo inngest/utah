@@ -1,24 +1,72 @@
 /**
- * Context — builds the system prompt for the agent.
+ * Context — builds the system prompt and conversation history for the agent.
  *
- * Injects workspace context files (IDENTITY.md, SOUL.md, USER.md, MEMORY.md)
- * into the system prompt, similar to how OpenClaw/pi-agent-core bootstraps
- * agent identity. If files don't exist, they're simply skipped.
+ * Injects workspace context files (IDENTITY.md, SOUL.md, USER.md) and
+ * memory (MEMORY.md + daily logs) into the system prompt.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { existsSync } from "fs";
+import { readFile } from "fs/promises";
 import { resolve } from "path";
 import { config } from "../config.ts";
+import { buildMemoryContext } from "./memory.ts";
+import { loadSession } from "./session.ts";
 
-// Files to inject into the system prompt (order matters)
-const CONTEXT_FILES = ["IDENTITY.md", "SOUL.md", "USER.md", "MEMORY.md"];
+/**
+ * Load an optional markdown file from the workspace root.
+ * Returns null if the file doesn't exist.
+ */
+async function loadOptionalFile(filename: string): Promise<string | null> {
+  const path = resolve(config.workspace.root, filename);
+  if (!existsSync(path)) return null;
+  try {
+    return await readFile(path, "utf-8");
+  } catch {
+    return null;
+  }
+}
 
-export function buildSystemPrompt(): string {
-  const base = `You are ${config.agent.name}, a helpful AI assistant.
+/**
+ * Build the full system prompt.
+ *
+ * Structure:
+ * 1. Identity (IDENTITY.md, SOUL.md, or default)
+ * 2. User info (USER.md)
+ * 3. Memory (MEMORY.md + daily logs)
+ * 4. Tool usage guidelines
+ */
+export async function buildSystemPrompt(): Promise<string> {
+  const identity = await loadOptionalFile("IDENTITY.md");
+  const soul = await loadOptionalFile("SOUL.md");
+  const user = await loadOptionalFile("USER.md");
+  const memory = await buildMemoryContext();
 
-## Tools & Behavior
-- You have tools for reading/writing files, running commands, and fetching URLs.
+  const parts: string[] = [];
+
+  // Identity
+  if (soul) {
+    parts.push(soul);
+  } else if (identity) {
+    parts.push(identity);
+  } else {
+    parts.push(
+      `You are ${config.agent.name}, a helpful AI assistant powered by Inngest.`,
+    );
+  }
+
+  // User info
+  if (user) {
+    parts.push(`## About the User\n${user}`);
+  }
+
+  // Memory
+  parts.push(`## Memory\n${memory}`);
+
+  // Guidelines
+  parts.push(`## Tools & Behavior
+- You have tools for reading/writing files, running commands, fetching URLs, and saving memories.
 - Use tools to gather information before answering when needed.
+- Save important things to memory using the "remember" tool.
 - Be concise and direct.
 - Current time: ${new Date().toISOString()}
 
@@ -26,39 +74,30 @@ export function buildSystemPrompt(): string {
 - Your text response IS the reply. When you respond with text and no tool calls, the conversation turn ends.
 - For most messages: just reply with text. No tools needed.
 - Only use tools when you actually need to read/write files, run commands, or fetch URLs.
+- Do NOT explore the workspace or read files unless the user asks you to.
 - When using tools: gather what you need, then respond with text. Do not chain unnecessary tool calls.
 
 ## Tool Call Discipline
 - Each tool call costs time and tokens. Be efficient.
 - If you can answer from what you already know, do that.
 - If one tool call gives you the answer, respond immediately.
-- Never loop on the same tool with slightly different inputs hoping for a better result.`;
+- Never loop on the same tool with slightly different inputs hoping for a better result.`);
 
-  // Inject workspace context files
-  const contextParts: string[] = [];
+  return parts.join("\n\n---\n\n");
+}
 
-  for (const file of CONTEXT_FILES) {
-    const filePath = resolve(config.workspace.root, file);
-    if (existsSync(filePath)) {
-      const content = readFileSync(filePath, "utf-8").trim();
-      if (content) {
-        contextParts.push(`## ${file}\n${content}`);
-      }
-    }
-  }
-
-  // Also check for a memory.md file (append-only memory log)
-  const memoryPath = resolve(config.workspace.root, "memory.md");
-  if (memoryPath !== resolve(config.workspace.root, "MEMORY.md") && existsSync(memoryPath)) {
-    const memory = readFileSync(memoryPath, "utf-8").trim();
-    if (memory) {
-      contextParts.push(`## Memory Log\n${memory}`);
-    }
-  }
-
-  if (contextParts.length > 0) {
-    return base + "\n\n# Workspace Context\n\n" + contextParts.join("\n\n");
-  }
-
-  return base;
+/**
+ * Build conversation messages from session history.
+ */
+export async function buildConversationHistory(
+  sessionKey: string,
+  maxMessages = 10,
+): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+  const history = await loadSession(sessionKey, maxMessages);
+  return history
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
 }
