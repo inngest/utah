@@ -7,17 +7,18 @@
 
 import { inngest } from "./client.ts";
 import { handleMessage } from "./functions/message.ts";
+import { sendReply } from "./functions/send-reply.ts";
+import { typingIndicator } from "./functions/typing-indicator.ts";
 import { failureHandler } from "./functions/failure-handler.ts";
 import { heartbeat } from "./functions/heartbeat.ts";
-import { telegramReply, telegramTyping } from "./channels/telegram/index.ts";
 import { ensureWorkspace } from "./lib/session.ts";
 import { setup } from "./setup.ts";
 import { config } from "./config.ts";
 
 const functions = [
   handleMessage,
-  telegramReply,
-  telegramTyping,
+  sendReply,
+  typingIndicator,
   failureHandler,
   heartbeat,
 ];

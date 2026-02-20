@@ -1,30 +1,36 @@
 /**
  * Setup — orchestrates channel setup at startup.
  *
- * Runs each configured channel's setup (webhook creation, transform sync, etc.)
- * and prints confirmation to the terminal.
+ * Iterates over registered channels and runs their setup if configured.
  *
  * Run at startup (via worker.ts) or standalone:
  *   node --experimental-strip-types src/setup.ts
  */
 
 import { config } from "./config.ts";
-import { setupTelegram } from "./channels/telegram/index.ts";
+import { getChannel, getChannelNames } from "./channels/index.ts";
 
 export async function setup(): Promise<void> {
   console.log(`\n🔧 Setting up ${config.agent.name}...\n`);
 
   try {
-    // Set up each configured channel
-    if (config.telegram.botToken) {
-      await setupTelegram();
-    } else {
-      console.log("⏭️  Telegram: skipped (no TELEGRAM_BOT_TOKEN)");
-    }
+    for (const name of getChannelNames()) {
+      const handler = getChannel(name)!;
 
-    // Future channels:
-    // if (config.slack?.botToken) await setupSlack();
-    // if (config.discord?.botToken) await setupDiscord();
+      if (!handler.setup) {
+        console.log(`⏭️  ${name}: no setup needed`);
+        continue;
+      }
+
+      // Check if the channel is configured (has required tokens)
+      const channelConfig = (config as any)[name];
+      if (!channelConfig?.botToken) {
+        console.log(`⏭️  ${name}: skipped (no bot token configured)`);
+        continue;
+      }
+
+      await handler.setup();
+    }
 
     console.log("\n✅ Setup complete!\n");
   } catch (err) {
