@@ -14,6 +14,25 @@ import { existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { config } from "../config.ts";
 
+// Heartbeat timestamp — appended to MEMORY.md as an HTML comment
+export const TIMESTAMP_PATTERN = /<!-- last_heartbeat: (.+) -->/;
+
+export function parseLastHeartbeat(memoryContent: string): Date | null {
+  const match = memoryContent.match(TIMESTAMP_PATTERN);
+  if (!match) return null;
+  const d = new Date(match[1]);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+export function stripTimestamp(content: string): string {
+  return content.replace(/\n*<!-- last_heartbeat: .+ -->\s*$/, "").trimEnd();
+}
+
+export function appendTimestamp(content: string): string {
+  const ts = new Date().toISOString();
+  return `${content.trimEnd()}\n\n<!-- last_heartbeat: ${ts} -->`;
+}
+
 function getWorkspacePath(...parts: string[]): string {
   return resolve(config.workspace.root, ...parts);
 }
@@ -93,7 +112,9 @@ export async function appendDailyLog(entry: string): Promise<void> {
  * Loads long-term memory + yesterday's log + today's log.
  */
 export async function buildMemoryContext(): Promise<string> {
-  const memory = await readMemory();
+  const raw = await readMemory();
+  // Strip heartbeat timestamp — agent doesn't need to see it
+  const memory = stripTimestamp(raw).trim();
   const today = await readDailyLog();
   const yesterday = await readDailyLog(
     new Date(Date.now() - 86400000).toISOString().split("T")[0],
