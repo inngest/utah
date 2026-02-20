@@ -30,7 +30,7 @@ const HEARTBEAT_CRON = process.env.HEARTBEAT_CRON || "*/30 * * * *"; // Every 30
 const LOG_SIZE_THRESHOLD = 4096;  // Bytes — distill when daily log exceeds this
 const MAX_HOURS_BETWEEN = 8;      // Force distill after this many hours
 const DAYS_TO_REVIEW = 7;        // Review last 7 days of logs
-const DAYS_TO_KEEP = 14;         // Prune daily logs older than this
+const DAYS_TO_KEEP = parseInt(process.env.MEMORY_RETENTION_DAYS || "30"); // Prune daily logs older than this
 
 // Timestamp format appended to MEMORY.md
 const TIMESTAMP_PATTERN = /<!-- last_heartbeat: (.+) -->/;
