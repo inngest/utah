@@ -7,6 +7,7 @@ import { existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { exec } from "child_process";
 import { config } from "../config.ts";
+import { appendDailyLog } from "./memory.ts";
 
 // --- Tool Definitions (Anthropic format) ---
 
@@ -54,6 +55,21 @@ export const TOOLS = [
         cwd: { type: "string", description: "Working directory (default: workspace)" },
       },
       required: ["command"],
+    },
+  },
+  {
+    name: "remember",
+    description:
+      "Save a note to today's daily log. Use for things you want to remember across conversations — decisions, facts, user preferences, task outcomes.",
+    parameters: {
+      type: "object",
+      properties: {
+        note: {
+          type: "string",
+          description: "The note to save",
+        },
+      },
+      required: ["note"],
     },
   },
   {
@@ -108,6 +124,10 @@ export async function executeTool(
         const cwd = resolvePath((args.cwd as string) || ".");
         const output = await runShellCommand(args.command as string, cwd);
         return { result: output.slice(0, 50_000) };
+      }
+      case "remember": {
+        await appendDailyLog(args.note as string);
+        return { result: "Saved to today's log." };
       }
       case "web_fetch": {
         const res = await fetch(args.url as string, {

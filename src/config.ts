@@ -9,6 +9,8 @@ export const config = {
   workspace: {
     root: resolve(process.env.AGENT_WORKSPACE || "./workspace"),
     sessionDir: "sessions",
+    memoryFile: "MEMORY.md",
+    memoryDir: "memory",
   },
 
   llm: {

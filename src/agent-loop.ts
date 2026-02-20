@@ -14,8 +14,8 @@
 import { config } from "./config.ts";
 import { callAnthropic, type LLMToolCall } from "./lib/llm.ts";
 import { TOOLS, executeTool } from "./lib/tools.ts";
-import { buildSystemPrompt } from "./lib/context.ts";
-import { loadSession } from "./lib/session.ts";
+import { buildSystemPrompt, buildConversationHistory } from "./lib/context.ts";
+import { ensureWorkspace } from "./lib/memory.ts";
 
 // --- Types ---
 
@@ -108,11 +108,19 @@ type StepAPI = {
  */
 export function createAgentLoop(userMessage: string, sessionKey: string) {
   return async (step: StepAPI): Promise<AgentRunResult> => {
-    const systemPrompt = buildSystemPrompt();
+    // Ensure workspace directories exist (sessions, memory)
+    await step.run("ensure-workspace", async () => {
+      await ensureWorkspace();
+    });
+
+    // Build system prompt (loads SOUL.md, USER.md, memory)
+    const systemPrompt = await step.run("load-context", async () => {
+      return await buildSystemPrompt();
+    });
 
     // Load conversation history
     const history = await step.run("load-history", async () => {
-      return await loadSession(sessionKey);
+      return await buildConversationHistory(sessionKey);
     });
 
     const messages: Message[] = [
