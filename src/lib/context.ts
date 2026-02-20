@@ -1,8 +1,8 @@
 /**
  * Context — builds the system prompt and conversation history for the agent.
  *
- * Loads identity files (SOUL.md, USER.md), memory, and session history
- * to give the agent full awareness of who it is and what's happened.
+ * Injects workspace context files (IDENTITY.md, SOUL.md, USER.md) and
+ * memory (MEMORY.md + daily logs) into the system prompt.
  */
 
 import { existsSync } from "fs";
@@ -30,12 +30,13 @@ async function loadOptionalFile(filename: string): Promise<string | null> {
  * Build the full system prompt.
  *
  * Structure:
- * 1. Identity (SOUL.md or default)
+ * 1. Identity (IDENTITY.md, SOUL.md, or default)
  * 2. User info (USER.md)
  * 3. Memory (MEMORY.md + daily logs)
  * 4. Tool usage guidelines
  */
 export async function buildSystemPrompt(): Promise<string> {
+  const identity = await loadOptionalFile("IDENTITY.md");
   const soul = await loadOptionalFile("SOUL.md");
   const user = await loadOptionalFile("USER.md");
   const memory = await buildMemoryContext();
@@ -45,6 +46,8 @@ export async function buildSystemPrompt(): Promise<string> {
   // Identity
   if (soul) {
     parts.push(soul);
+  } else if (identity) {
+    parts.push(identity);
   } else {
     parts.push(
       `You are ${config.agent.name}, a helpful AI assistant powered by Inngest.`,

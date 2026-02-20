@@ -24,7 +24,7 @@ async function main() {
   await ensureWorkspace(config.workspace.root);
 
   console.log(`🤖 ${config.agent.name} starting...`);
-  console.log(`   Model: ${config.agent.model}`);
+  console.log(`   Model: ${config.llm.provider}/${config.llm.model}`);
   console.log(`   Workspace: ${config.workspace.root}`);
   console.log(`   Functions: ${functions.length}`);
 

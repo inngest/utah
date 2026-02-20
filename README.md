@@ -103,10 +103,11 @@ src/
 ├── config.ts              # Configuration from env vars
 ├── agent-loop.ts          # Core think → act → observe cycle
 ├── lib/
-│   ├── llm.ts             # Anthropic API wrapper (no SDK, just fetch)
-│   ├── tools.ts           # Tool definitions + execution
-│   ├── context.ts         # System prompt builder
-│   └── session.ts         # JSONL session persistence
+│   ├── llm.ts             # pi-ai wrapper (multi-provider: Anthropic, OpenAI, Google)
+│   ├── tools.ts           # Tool definitions (TypeBox schemas) + execution
+│   ├── context.ts         # System prompt builder with workspace file injection
+│   ├── session.ts         # JSONL session persistence
+│   └── compaction.ts      # LLM-powered conversation summarization
 ├── functions/
 │   ├── message.ts         # Main agent function (singleton + cancelOn)
 │   ├── telegram-reply.ts  # Send responses to Telegram (with HTML fallback)
@@ -114,6 +115,12 @@ src/
 │   └── failure-handler.ts # Global error handler with Telegram notifications
 └── transforms/
     └── telegram.ts        # Webhook transform (paste into Inngest dashboard)
+workspace/                   # Agent workspace (persisted across runs)
+├── IDENTITY.md            # Agent identity and personality
+├── SOUL.md                # Behavioral guidelines
+├── USER.md                # User information
+├── MEMORY.md              # Long-term memory (agent-writable)
+└── sessions/              # JSONL conversation files (gitignored)
 ```
 
 ## How It Works
@@ -122,7 +129,7 @@ src/
 
 The core is a while loop where each iteration is an Inngest step:
 
-1. **Think** — `step.run("think")` calls the Anthropic API
+1. **Think** — `step.run("think")` calls the LLM via pi-ai's `complete()`
 2. **Act** — if the LLM wants tools, each tool runs as `step.run("tool-read_file")`
 3. **Observe** — tool results are fed back into the conversation
 4. **Repeat** — until the LLM responds with text (no tools) or max iterations
@@ -139,6 +146,31 @@ One incoming message triggers multiple independent functions:
 | `telegram-typing-indicator` | Show "typing..." immediately | No retries (best effort) |
 | `telegram-send-reply` | Format and send the response | 3 retries, HTML fallback |
 | `global-failure-handler` | Catch errors, notify user | Triggered by `inngest/function.failed` |
+
+### Workspace Context Injection
+
+The agent reads markdown files from the workspace directory and injects them into the system prompt:
+
+| File | Purpose |
+|---|---|
+| `IDENTITY.md` | Agent name, role, personality |
+| `SOUL.md` | Behavioral guidelines, tone, boundaries |
+| `USER.md` | Info about the user (name, timezone, preferences) |
+| `MEMORY.md` | Long-term memory the agent can read and update |
+
+Edit these files to customize your agent's personality and knowledge. The agent can also update `MEMORY.md` using the `write_file` tool to remember things across conversations.
+
+### Conversation Compaction
+
+Long conversations get summarized automatically so the agent doesn't lose context or hit token limits:
+
+- **Token estimation**: Uses a chars/4 heuristic to estimate conversation size
+- **Threshold**: Compaction triggers when estimated tokens exceed 80% of the configured max (150K)
+- **LLM summarization**: Old messages are summarized into a structured checkpoint (goals, progress, decisions, next steps)
+- **Recent messages preserved**: The most recent ~20K tokens of conversation are kept verbatim
+- **Persisted**: The compacted session replaces the JSONL file, so it survives restarts
+
+Compaction runs as an Inngest step (`step.run("compact")`), so it's durable and retryable.
 
 ### Context Pruning
 

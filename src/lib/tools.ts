@@ -1,7 +1,12 @@
 /**
  * Tools — capabilities the agent can use during the think/act/observe loop.
+ *
+ * Uses TypeBox schemas (via pi-ai) for type-safe tool definitions
+ * that work across LLM providers.
  */
 
+import { Type } from "@mariozechner/pi-ai";
+import type { Tool } from "@mariozechner/pi-ai";
 import { readFile, writeFile, readdir, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { resolve, dirname } from "path";
@@ -9,53 +14,38 @@ import { exec } from "child_process";
 import { config } from "../config.ts";
 import { appendDailyLog } from "./memory.ts";
 
-// --- Tool Definitions (Anthropic format) ---
+// --- Tool Definitions (TypeBox schemas) ---
 
-export const TOOLS = [
+export const TOOLS: Tool[] = [
   {
     name: "read_file",
     description: "Read the contents of a file",
-    parameters: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "File path (relative to workspace or absolute)" },
-      },
-      required: ["path"],
-    },
+    parameters: Type.Object({
+      path: Type.String({ description: "File path (relative to workspace or absolute)" }),
+    }),
   },
   {
     name: "write_file",
     description: "Write content to a file (creates directories if needed)",
-    parameters: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "File path" },
-        content: { type: "string", description: "Content to write" },
-      },
-      required: ["path", "content"],
-    },
+    parameters: Type.Object({
+      path: Type.String({ description: "File path" }),
+      content: Type.String({ description: "Content to write" }),
+    }),
   },
   {
     name: "list_directory",
     description: "List files in a directory",
-    parameters: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Directory path (default: workspace root)" },
-      },
-    },
+    parameters: Type.Object({
+      path: Type.Optional(Type.String({ description: "Directory path (default: workspace root)" })),
+    }),
   },
   {
     name: "run_command",
     description: "Run a shell command and return stdout/stderr",
-    parameters: {
-      type: "object",
-      properties: {
-        command: { type: "string", description: "Shell command to execute" },
-        cwd: { type: "string", description: "Working directory (default: workspace)" },
-      },
-      required: ["command"],
-    },
+    parameters: Type.Object({
+      command: Type.String({ description: "Shell command to execute" }),
+      cwd: Type.Optional(Type.String({ description: "Working directory (default: workspace)" })),
+    }),
   },
   {
     name: "remember",
@@ -75,13 +65,9 @@ export const TOOLS = [
   {
     name: "web_fetch",
     description: "Fetch a URL and return the response body as text",
-    parameters: {
-      type: "object",
-      properties: {
-        url: { type: "string", description: "URL to fetch" },
-      },
-      required: ["url"],
-    },
+    parameters: Type.Object({
+      url: Type.String({ description: "URL to fetch" }),
+    }),
   },
 ];
 
@@ -105,7 +91,7 @@ export async function executeTool(
       case "read_file": {
         const fullPath = resolvePath(args.path as string);
         const content = await readFile(fullPath, "utf-8");
-        return { result: content.slice(0, 50_000) }; // Cap large files
+        return { result: content.slice(0, 50_000) };
       }
       case "write_file": {
         const fullPath = resolvePath(args.path as string);

@@ -1,6 +1,9 @@
 node_modules/
 dist/
 .env
-workspace/
 *.tsbuildinfo
 .DS_Store
+
+# Workspace: keep context templates, ignore runtime data
+workspace/sessions/
+workspace/memory.md
