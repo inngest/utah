@@ -19,9 +19,12 @@
 
 import { inngest } from "../client.ts";
 import { config } from "../config.ts";
-import { readMemory, writeMemory, readDailyLog } from "../lib/memory.ts";
+import {
+  readMemory, writeMemory, readDailyLog,
+  parseLastHeartbeat, stripTimestamp, appendTimestamp,
+} from "../lib/memory.ts";
 import { callLLM } from "../lib/llm.ts";
-import { readdir, unlink, stat } from "fs/promises";
+import { readdir, unlink } from "fs/promises";
 import { resolve } from "path";
 
 // --- Config ---
@@ -31,9 +34,6 @@ const LOG_SIZE_THRESHOLD = 4096;  // Bytes — distill when daily log exceeds th
 const MAX_HOURS_BETWEEN = 8;      // Force distill after this many hours
 const DAYS_TO_REVIEW = 7;        // Review last 7 days of logs
 const DAYS_TO_KEEP = parseInt(process.env.MEMORY_RETENTION_DAYS || "30"); // Prune daily logs older than this
-
-// Timestamp format appended to MEMORY.md
-const TIMESTAMP_PATTERN = /<!-- last_heartbeat: (.+) -->/;
 
 // --- Helpers ---
 
@@ -48,22 +48,6 @@ function getRecentDates(days: number): string[] {
 
 function getMemoryDir(): string {
   return resolve(config.workspace.root, config.workspace.memoryDir);
-}
-
-function parseLastHeartbeat(memoryContent: string): Date | null {
-  const match = memoryContent.match(TIMESTAMP_PATTERN);
-  if (!match) return null;
-  const d = new Date(match[1]);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-function stripTimestamp(content: string): string {
-  return content.replace(/\n*<!-- last_heartbeat: .+ -->\s*$/, "").trimEnd();
-}
-
-function appendTimestamp(content: string): string {
-  const ts = new Date().toISOString();
-  return `${content.trimEnd()}\n\n<!-- last_heartbeat: ${ts} -->`;
 }
 
 function todayString(): string {
