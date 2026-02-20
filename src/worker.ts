@@ -12,6 +12,7 @@ import { telegramTyping } from "./functions/telegram-typing.ts";
 import { failureHandler } from "./functions/failure-handler.ts";
 import { heartbeat } from "./functions/heartbeat.ts";
 import { ensureWorkspace } from "./lib/session.ts";
+import { setup } from "./setup.ts";
 import { config } from "./config.ts";
 
 const functions = [
@@ -24,6 +25,9 @@ const functions = [
 
 async function main() {
   await ensureWorkspace(config.workspace.root);
+
+  // Ensure Inngest webhook + Telegram webhook are configured
+  await setup();
 
   console.log(`🤖 ${config.agent.name} starting...`);
   console.log(`   Model: ${config.llm.provider}/${config.llm.model}`);
