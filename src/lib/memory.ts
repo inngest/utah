@@ -93,7 +93,9 @@ export async function appendDailyLog(entry: string): Promise<void> {
  * Loads long-term memory + yesterday's log + today's log.
  */
 export async function buildMemoryContext(): Promise<string> {
-  const memory = await readMemory();
+  const raw = await readMemory();
+  // Strip heartbeat timestamp — agent doesn't need to see it
+  const memory = raw.replace(/\n*<!-- last_heartbeat: .+ -->\s*$/, "").trim();
   const today = await readDailyLog();
   const yesterday = await readDailyLog(
     new Date(Date.now() - 86400000).toISOString().split("T")[0],
