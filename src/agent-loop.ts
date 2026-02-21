@@ -165,6 +165,13 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
         return await callLLM(systemPrompt, messagesForLLM, TOOLS);
       });
 
+      // If the LLM returned an error, stop the loop
+      if (llmResponse.stopReason === "error") {
+        finalResponse = llmResponse.text || "(LLM returned an error)";
+        done = true;
+        break;
+      }
+
       const toolCalls = llmResponse.toolCalls;
 
       if (toolCalls.length > 0) {
