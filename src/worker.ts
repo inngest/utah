@@ -7,23 +7,27 @@
 
 import { inngest } from "./client.ts";
 import { handleMessage } from "./functions/message.ts";
-import { telegramReply } from "./functions/telegram-reply.ts";
-import { telegramTyping } from "./functions/telegram-typing.ts";
+import { sendReply } from "./functions/send-reply.ts";
+import { acknowledgeMessage } from "./functions/acknowledge-message.ts";
 import { failureHandler } from "./functions/failure-handler.ts";
 import { heartbeat } from "./functions/heartbeat.ts";
 import { ensureWorkspace } from "./lib/session.ts";
+import { setup } from "./setup.ts";
 import { config } from "./config.ts";
 
 const functions = [
   handleMessage,
-  telegramReply,
-  telegramTyping,
+  sendReply,
+  acknowledgeMessage,
   failureHandler,
   heartbeat,
 ];
 
 async function main() {
   await ensureWorkspace(config.workspace.root);
+
+  // Ensure Inngest webhook + Telegram webhook are configured
+  await setup();
 
   console.log(`🤖 ${config.agent.name} starting...`);
   console.log(`   Model: ${config.llm.provider}/${config.llm.model}`);
