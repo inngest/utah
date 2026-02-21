@@ -13,7 +13,6 @@
 import { inngest } from "../client.ts";
 import { createAgentLoop } from "../agent-loop.ts";
 import { appendToSession } from "../lib/session.ts";
-import type { AgentMessageData } from "../channels/types.ts";
 
 export const handleMessage = inngest.createFunction(
   {
@@ -28,10 +27,9 @@ export const handleMessage = inngest.createFunction(
       message,
       sessionKey = "main",
       channel = "unknown",
-      sender,
       destination,
       channelMeta = {},
-    } = event.data as AgentMessageData;
+    } = event.data;
 
     // Save the incoming message
     await step.run("save-incoming", async () => {
