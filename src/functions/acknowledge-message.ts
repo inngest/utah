@@ -12,24 +12,21 @@
 
 import { inngest } from "../client.ts";
 import { getChannel } from "../channels/index.ts";
+import type { AgentMessageData } from "../channels/types.ts";
 
 export const acknowledgeMessage = inngest.createFunction(
   { id: "acknowledge-message", retries: 0 },
   { event: "agent.message.received" },
   async ({ event, step }) => {
-    const { channel, chatId, messageId } = event.data as {
-      channel: string;
-      chatId: string;
-      messageId?: string;
-    };
+    const { channel, destination, channelMeta } = event.data as AgentMessageData;
 
-    if (!chatId) return;
+    if (!destination?.chatId) return;
 
     const handler = getChannel(channel);
     if (!handler) return;
 
     await step.run("acknowledge", async () => {
-      await handler.acknowledge({ chatId, messageId });
+      await handler.acknowledge({ destination, channelMeta });
     });
   },
 );

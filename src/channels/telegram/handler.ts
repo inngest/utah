@@ -7,10 +7,25 @@ import { sendMessage, sendTyping as apiSendTyping } from "./api.ts";
 import { markdownToTelegramHTML, stripMarkdown, splitMessage } from "./format.ts";
 
 /**
+ * Telegram-specific metadata passed through channelMeta.
+ */
+interface TelegramMeta {
+  chatType?: "private" | "group" | "supergroup" | "channel";
+  chatTitle?: string;
+  replyToMessage?: {
+    messageId: number;
+    text?: string;
+  };
+  forumTopicId?: number;
+}
+
+/**
  * Send an agent reply to Telegram. Handles HTML conversion,
  * message splitting, and plain text fallback.
  */
-export async function sendReply({ response, chatId, messageId }: SendReplyParams): Promise<void> {
+export async function sendReply({ response, destination, channelMeta }: SendReplyParams): Promise<void> {
+  const { chatId, messageId } = destination;
+
   // Send typing first
   await apiSendTyping(chatId);
 
@@ -40,8 +55,8 @@ export async function sendReply({ response, chatId, messageId }: SendReplyParams
 /**
  * Acknowledge message receipt — Telegram shows a typing indicator.
  */
-export async function acknowledge({ chatId }: AcknowledgeParams): Promise<void> {
-  await apiSendTyping(chatId);
+export async function acknowledge({ destination }: AcknowledgeParams): Promise<void> {
+  await apiSendTyping(destination.chatId);
 }
 
 /**
