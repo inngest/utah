@@ -14,12 +14,7 @@ export const sendReply = inngest.createFunction(
   { id: "send-reply", retries: 3 },
   { event: "agent.reply.ready" },
   async ({ event, step }) => {
-    const { response, channel, chatId, messageId } = event.data as {
-      response: string;
-      channel: string;
-      chatId: string;
-      messageId?: string;
-    };
+    const { response, channel, destination, channelMeta } = event.data;
 
     const handler = getChannel(channel);
     if (!handler) {
@@ -28,7 +23,7 @@ export const sendReply = inngest.createFunction(
     }
 
     await step.run("send", async () => {
-      await handler.sendReply({ response, chatId, messageId });
+      await handler.sendReply({ response, destination, channelMeta });
     });
   },
 );

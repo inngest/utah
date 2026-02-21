@@ -18,17 +18,18 @@ export const handleMessage = inngest.createFunction(
   {
     id: "agent-handle-message",
     retries: 2,
-    concurrency: [{ scope: "fn", key: "event.data.chatId", limit: 1 }],
-    cancelOn: [{ event: "agent.message.received", match: "data.chatId" }],
+    concurrency: [{ scope: "fn", key: "event.data.destination.chatId", limit: 1 }],
+    cancelOn: [{ event: "agent.message.received", match: "data.destination.chatId" }],
   },
   { event: "agent.message.received" },
   async ({ event, step }) => {
-    const { message, sessionKey = "main", channel = "unknown", replyTo } = event.data as {
-      message: string;
-      sessionKey?: string;
-      channel?: string;
-      replyTo?: { channel: string; chatId: string; messageId?: string };
-    };
+    const {
+      message,
+      sessionKey = "main",
+      channel = "unknown",
+      destination,
+      channelMeta = {},
+    } = event.data;
 
     // Save the incoming message
     await step.run("save-incoming", async () => {
@@ -47,13 +48,15 @@ export const handleMessage = inngest.createFunction(
       });
     });
 
-    // Emit a reply event for channel-specific handlers
-    if (replyTo) {
+    // Emit a reply event — destination and channelMeta pass through
+    if (destination) {
       await step.sendEvent("reply", {
         name: "agent.reply.ready",
         data: {
           response: result.response,
-          ...replyTo,
+          channel,
+          destination,
+          channelMeta,
         },
       });
     }

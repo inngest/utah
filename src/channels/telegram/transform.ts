@@ -18,6 +18,11 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
 
     var msg = evt.message;
     var chatId = String(msg.chat.id);
+    var fromId = String(msg.from && msg.from.id || "unknown");
+    var firstName = (msg.from && msg.from.first_name) || "Unknown";
+    var lastName = msg.from && msg.from.last_name;
+    var username = msg.from && msg.from.username;
+    var displayName = lastName ? firstName + " " + lastName : firstName;
 
     return {
       name: "agent.message.received",
@@ -25,17 +30,26 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
         message: msg.text,
         sessionKey: "telegram-" + chatId,
         channel: "telegram",
-        senderId: String(msg.from && msg.from.id || "unknown"),
-        senderName: (msg.from && msg.from.first_name) || "Unknown",
-        chatId: chatId,
-        chatType: msg.chat.type,
-        messageId: String(msg.message_id),
-        replyTo: {
-          channel: "telegram",
+        sender: {
+          id: fromId,
+          name: displayName,
+          username: username
+        },
+        destination: {
           chatId: chatId,
           messageId: String(msg.message_id),
+          threadId: msg.message_thread_id ? String(msg.message_thread_id) : undefined
         },
-      },
+        channelMeta: {
+          chatType: msg.chat.type,
+          chatTitle: msg.chat.title,
+          replyToMessage: msg.reply_to_message ? {
+            messageId: msg.reply_to_message.message_id,
+            text: msg.reply_to_message.text
+          } : undefined,
+          forumTopicId: msg.message_thread_id
+        }
+      }
     };
   } catch (e) {
     return { name: "telegram/transform.failed", data: { error: String(e), raw: evt } };
@@ -44,22 +58,26 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
 
 // --- TypeScript version (for reference/type-checking) ---
 
+import type { AgentMessageData } from "../types.ts";
+
 interface TelegramUpdate {
   update_id: number;
   message?: {
     message_id: number;
+    message_thread_id?: number;
     from?: { id: number; first_name: string; last_name?: string; username?: string };
-    chat: { id: number; type: string };
+    chat: { id: number; type: string; title?: string };
     text?: string;
+    reply_to_message?: { message_id: number; text?: string };
   };
 }
 
-export function transform(evt: TelegramUpdate) {
+export function transform(evt: TelegramUpdate): { name: string; data: AgentMessageData } | undefined {
   if (!evt.message?.text) return undefined;
 
   const msg = evt.message;
   const chatId = String(msg.chat.id);
-  const senderName = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Unknown";
+  const displayName = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Unknown";
 
   return {
     name: "agent.message.received",
@@ -67,12 +85,25 @@ export function transform(evt: TelegramUpdate) {
       message: msg.text,
       sessionKey: `telegram-${chatId}`,
       channel: "telegram",
-      senderId: String(msg.from?.id || "unknown"),
-      senderName,
-      chatId,
-      chatType: msg.chat.type,
-      messageId: String(msg.message_id),
-      replyTo: { channel: "telegram", chatId, messageId: String(msg.message_id) },
+      sender: {
+        id: String(msg.from?.id || "unknown"),
+        name: displayName,
+        username: msg.from?.username,
+      },
+      destination: {
+        chatId,
+        messageId: String(msg.message_id),
+        threadId: msg.message_thread_id ? String(msg.message_thread_id) : undefined,
+      },
+      channelMeta: {
+        chatType: msg.chat.type,
+        chatTitle: msg.chat.title,
+        replyToMessage: msg.reply_to_message ? {
+          messageId: msg.reply_to_message.message_id,
+          text: msg.reply_to_message.text,
+        } : undefined,
+        forumTopicId: msg.message_thread_id,
+      },
     },
   };
 }
