@@ -3,7 +3,7 @@
  */
 
 // Channel handler (implements ChannelHandler interface)
-export { sendReply, sendTyping, setup } from "./handler.ts";
+export { sendReply, acknowledge, setup } from "./handler.ts";
 
 // Setup
 export { setupTelegram } from "./setup.ts";

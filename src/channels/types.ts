@@ -10,9 +10,13 @@ export interface ChannelHandler {
   sendReply(params: SendReplyParams): Promise<void>;
 
   /**
-   * Show a typing/activity indicator. Best-effort — failures are swallowed.
+   * Acknowledge receipt of a message. Best-effort — failures are swallowed.
+   * Each channel decides what this looks like:
+   * - Telegram: typing indicator
+   * - Slack: 👀 emoji reaction
+   * - Discord: typing indicator
    */
-  sendTyping(params: SendTypingParams): Promise<void>;
+  acknowledge(params: AcknowledgeParams): Promise<void>;
 
   /**
    * Run channel-specific setup (create webhooks, verify tokens, etc).
@@ -26,11 +30,13 @@ export interface SendReplyParams {
   response: string;
   /** Channel-specific chat/thread identifier */
   chatId: string;
-  /** Optional: message ID to reply to */
+  /** Optional: message ID to reply to/react to */
   messageId?: string;
 }
 
-export interface SendTypingParams {
+export interface AcknowledgeParams {
   /** Channel-specific chat/thread identifier */
   chatId: string;
+  /** Optional: message ID to acknowledge (e.g. for reactions) */
+  messageId?: string;
 }

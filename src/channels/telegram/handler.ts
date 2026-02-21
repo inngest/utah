@@ -2,7 +2,7 @@
  * Telegram channel handler — implements the ChannelHandler interface.
  */
 
-import type { SendReplyParams, SendTypingParams } from "../types.ts";
+import type { SendReplyParams, AcknowledgeParams } from "../types.ts";
 import { sendMessage, sendTyping as apiSendTyping } from "./api.ts";
 import { markdownToTelegramHTML, stripMarkdown, splitMessage } from "./format.ts";
 
@@ -38,9 +38,9 @@ export async function sendReply({ response, chatId, messageId }: SendReplyParams
 }
 
 /**
- * Send typing indicator. Best-effort.
+ * Acknowledge message receipt — Telegram shows a typing indicator.
  */
-export async function sendTyping({ chatId }: SendTypingParams): Promise<void> {
+export async function acknowledge({ chatId }: AcknowledgeParams): Promise<void> {
   await apiSendTyping(chatId);
 }
 
