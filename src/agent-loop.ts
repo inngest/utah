@@ -212,7 +212,7 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
             if (tool) {
               validateToolArguments(tool, { type: "toolCall", name: tc.name, id: tc.id, arguments: tc.arguments });
             }
-            return await executeTool(tc.name, tc.arguments);
+            return await executeTool(tc.id, tc.name, tc.arguments);
           });
 
           // Observe: feed result back in pi-ai's ToolResultMessage format
