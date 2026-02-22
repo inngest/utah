@@ -10,7 +10,7 @@ import { existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { config } from "../config.ts";
 
-interface SessionMessage {
+export interface SessionMessage {
   role: string;
   content: string;
   timestamp: string;

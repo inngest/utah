@@ -22,6 +22,7 @@ import { TOOLS, executeTool } from "./lib/tools.ts";
 import { buildSystemPrompt, buildConversationHistory } from "./lib/context.ts";
 import { ensureWorkspace } from "./lib/memory.ts";
 import { shouldCompact, runCompaction } from "./lib/compaction.ts";
+import type { SessionMessage } from "./lib/session.ts";
 
 // --- Types ---
 
@@ -93,9 +94,14 @@ function pruneOldToolResults(messages: Message[]) {
 
 // --- The Loop ---
 
+/**
+ * Minimal step interface for the agent loop.
+ * Compatible with Inngest's step API — we only use run() here.
+ * sendEvent is called directly by the function handler, not the loop.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type StepAPI = {
-  run: (id: string, fn: () => Promise<unknown>) => Promise<any>;
-  sendEvent: (id: string, event: { name: string; data: unknown }) => Promise<void>;
+  run: (id: string, fn: () => Promise<any>) => Promise<any>;
 };
 
 /**
@@ -114,8 +120,8 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
       return await buildSystemPrompt();
     });
 
-    // Load conversation history
-    let history = await step.run("load-history", async () => {
+    // Load conversation history (step.run returns Jsonified types, so we annotate)
+    let history: SessionMessage[] = await step.run("load-history", async () => {
       return await buildConversationHistory(sessionKey);
     });
 
@@ -131,7 +137,7 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
     // pi-ai's transformMessages() expects AssistantMessage.content to be an array
     // of content blocks (it calls .flatMap on it), so we must convert accordingly.
     const messages: Message[] = [
-      ...history.map((h: { role: string; content: string }): Message => {
+      ...history.map((h): Message => {
         if (h.role === "assistant") {
           // Construct a minimal AssistantMessage with content as block array
           return {

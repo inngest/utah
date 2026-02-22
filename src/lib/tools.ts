@@ -51,16 +51,9 @@ export const TOOLS: Tool[] = [
     name: "remember",
     description:
       "Save a note to today's daily log. Use for things you want to remember across conversations — decisions, facts, user preferences, task outcomes.",
-    parameters: {
-      type: "object",
-      properties: {
-        note: {
-          type: "string",
-          description: "The note to save",
-        },
-      },
-      required: ["note"],
-    },
+    parameters: Type.Object({
+      note: Type.String({ description: "The note to save" }),
+    }),
   },
   {
     name: "web_fetch",
