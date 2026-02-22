@@ -61,14 +61,34 @@ const webFetchTool: Tool = {
   }),
 };
 
+const delegateTaskTool: Tool = {
+  name: "delegate_task",
+  description: `Delegate a self-contained task to a sub-agent that runs in an isolated context window.
+Use this when:
+- The task requires many file reads/edits (4+ tool calls expected)
+- The task is independent and can be described as a clear goal
+- You want to keep your own context lean
+The sub-agent has access to the same workspace and tools but its own conversation.
+You'll receive a summary of what it accomplished.`,
+  parameters: Type.Object({
+    task: Type.String({
+      description:
+        "Clear, detailed description of what the sub-agent should do. Include file paths, goals, and constraints.",
+    }),
+  }),
+};
+
 // --- Exports ---
 
 /**
- * All tools available to the agent.
- * Pi-coding-agent tools use AgentTool (extends Tool with execute()).
- * Custom tools are plain Tool definitions (executed via executeTool below).
+ * All tools available to the main agent (includes delegate_task).
  */
-export const TOOLS: Tool[] = [...piTools, rememberTool, webFetchTool];
+export const TOOLS: Tool[] = [...piTools, rememberTool, webFetchTool, delegateTaskTool];
+
+/**
+ * Tools available to sub-agents (no delegate_task to prevent recursive spawning).
+ */
+export const SUB_AGENT_TOOLS: Tool[] = [...piTools, rememberTool, webFetchTool];
 
 /**
  * Map of pi-coding-agent tools by name for direct execution.

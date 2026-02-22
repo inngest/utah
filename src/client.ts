@@ -14,6 +14,13 @@ type Events = {
   "telegram/transform.failed": {
     data: { error: string; raw: unknown };
   };
+  "agent.subagent.spawn": {
+    data: {
+      task: string;
+      subSessionKey: string;
+      parentSessionKey: string;
+    };
+  };
 };
 
 export const inngest = new Inngest({

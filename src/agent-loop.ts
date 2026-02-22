@@ -18,7 +18,7 @@
 
 import { config } from "./config.ts";
 import { callLLM, validateToolArguments, type Message } from "./lib/llm.ts";
-import { TOOLS, executeTool } from "./lib/tools.ts";
+import { TOOLS, SUB_AGENT_TOOLS, executeTool, type ToolResult } from "./lib/tools.ts";
 import { buildSystemPrompt, buildConversationHistory } from "./lib/context.ts";
 import { ensureWorkspace } from "./lib/memory.ts";
 import { shouldCompact, runCompaction } from "./lib/compaction.ts";
@@ -102,14 +102,24 @@ function pruneOldToolResults(messages: Message[]) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type StepAPI = {
   run: (id: string, fn: () => Promise<any>) => Promise<any>;
+  invoke: (id: string, opts: { function: any; data: any }) => Promise<any>;
 };
+
+export interface AgentLoopOptions {
+  /** Tools available in this loop. Defaults to TOOLS (includes delegate_task). */
+  tools?: typeof TOOLS;
+  /** Whether this is a sub-agent (disables delegate_task handling). */
+  isSubAgent?: boolean;
+}
 
 /**
  * Create the agent loop for a given message and session.
  * Returns a function that takes an Inngest step API and runs the loop.
  */
-export function createAgentLoop(userMessage: string, sessionKey: string) {
+export function createAgentLoop(userMessage: string, sessionKey: string, options?: AgentLoopOptions) {
   return async (step: StepAPI): Promise<AgentRunResult> => {
+    const tools = options?.tools ?? TOOLS;
+
     // Ensure workspace directories exist (sessions, memory)
     await step.run("ensure-workspace", async () => {
       await ensureWorkspace();
@@ -187,7 +197,7 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
 
       // Think: call the LLM via pi-ai
       const llmResponse = await step.run("think", async () => {
-        return await callLLM(systemPrompt, messagesForLLM, TOOLS);
+        return await callLLM(systemPrompt, messagesForLLM, tools);
       });
 
       // If the LLM returned an error, check if it's a context overflow
@@ -245,14 +255,33 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
         for (const tc of toolCalls) {
           totalToolCalls++;
 
-          const toolResult = await step.run(`tool-${tc.name}`, async () => {
-            // Validate arguments using pi-ai's TypeBox validation
-            const tool = TOOLS.find((t) => t.name === tc.name);
-            if (tool) {
-              validateToolArguments(tool, { type: "toolCall", name: tc.name, id: tc.id, arguments: tc.arguments });
-            }
-            return await executeTool(tc.id, tc.name, tc.arguments);
-          });
+          let toolResult: ToolResult;
+
+          if (tc.name === "delegate_task" && !options?.isSubAgent) {
+            // delegate_task uses step.invoke() to spawn a sub-agent function
+            const subSessionKey = `sub-${sessionKey}-${Date.now()}`;
+            const { subAgent } = await import("./functions/sub-agent.ts");
+            const subResult = await step.invoke("sub-agent", {
+              function: subAgent,
+              data: {
+                task: tc.arguments.task as string,
+                subSessionKey,
+                parentSessionKey: sessionKey,
+              },
+            });
+            toolResult = {
+              result: subResult?.response || "(Sub-agent returned no response)",
+            };
+          } else {
+            toolResult = await step.run(`tool-${tc.name}`, async () => {
+              // Validate arguments using pi-ai's TypeBox validation
+              const tool = tools.find((t) => t.name === tc.name);
+              if (tool) {
+                validateToolArguments(tool, { type: "toolCall", name: tc.name, id: tc.id, arguments: tc.arguments });
+              }
+              return await executeTool(tc.id, tc.name, tc.arguments);
+            });
+          }
 
           // Observe: feed result back in pi-ai's ToolResultMessage format
           messages.push({

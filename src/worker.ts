@@ -11,6 +11,7 @@ import { sendReply } from "./functions/send-reply.ts";
 import { acknowledgeMessage } from "./functions/acknowledge-message.ts";
 import { failureHandler } from "./functions/failure-handler.ts";
 import { heartbeat } from "./functions/heartbeat.ts";
+import { subAgent } from "./functions/sub-agent.ts";
 import { ensureWorkspace } from "./lib/session.ts";
 import { setup } from "./setup.ts";
 import { config } from "./config.ts";
@@ -21,6 +22,7 @@ const functions = [
   acknowledgeMessage,
   failureHandler,
   heartbeat,
+  subAgent,
 ];
 
 async function main() {
