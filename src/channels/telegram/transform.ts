@@ -76,13 +76,14 @@ export function transform(evt: TelegramUpdate): { name: string; data: AgentMessa
   if (!evt.message?.text) return undefined;
 
   const msg = evt.message;
+  const text = msg.text!; // Safe — guarded by the check above
   const chatId = String(msg.chat.id);
   const displayName = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Unknown";
 
   return {
     name: "agent.message.received",
     data: {
-      message: msg.text,
+      message: text,
       sessionKey: `telegram-${chatId}`,
       channel: "telegram",
       sender: {

@@ -10,7 +10,7 @@
  */
 
 import { callLLM } from "./llm.ts";
-import { loadSession, writeSession } from "./session.ts";
+import { loadSession, writeSession, type SessionMessage } from "./session.ts";
 import { config } from "../config.ts";
 
 // --- Summarization Prompts ---
@@ -53,29 +53,11 @@ Keep each section concise. Preserve exact file paths, function names, and error 
 
 // --- Token Estimation ---
 
-interface SessionMessage {
-  role: string;
-  content: any;
-  [key: string]: any;
-}
+// SessionMessage imported from ./session.ts
 
 function estimateMessageTokens(msg: SessionMessage): number {
-  let chars = 0;
-
-  if (typeof msg.content === "string") {
-    chars = msg.content.length;
-  } else if (Array.isArray(msg.content)) {
-    for (const block of msg.content) {
-      if (block.type === "text" && block.text) {
-        chars += block.text.length;
-      } else if (block.type === "toolCall") {
-        chars += (block.name?.length || 0) + JSON.stringify(block.arguments || {}).length;
-      } else if (block.type === "thinking") {
-        chars += block.thinking?.length || 0;
-      }
-    }
-  }
-
+  // Session messages always have string content (serialized from JSONL)
+  const chars = msg.content.length;
   return Math.ceil(chars / 4);
 }
 
@@ -100,27 +82,7 @@ function serializeConversation(messages: SessionMessage[]): string {
   return messages
     .map((msg) => {
       const role = msg.role.toUpperCase();
-      let content = "";
-
-      if (typeof msg.content === "string") {
-        content = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        content = msg.content
-          .map((c: any) => {
-            if (c.type === "text") return c.text;
-            if (c.type === "toolCall")
-              return `[Tool call: ${c.name}(${JSON.stringify(c.arguments)})]`;
-            return "";
-          })
-          .filter(Boolean)
-          .join("\n");
-      }
-
-      if (msg.role === "toolResult") {
-        return `TOOL_RESULT (${msg.toolName || "unknown"}): ${content}`;
-      }
-
-      return `${role}: ${content}`;
+      return `${role}: ${msg.content}`;
     })
     .join("\n\n");
 }

@@ -6,7 +6,7 @@
  */
 
 import { getModel, complete, validateToolArguments } from "@mariozechner/pi-ai";
-import type { Tool, Message, AssistantMessage } from "@mariozechner/pi-ai";
+import type { Tool, Message, AssistantMessage, KnownProvider } from "@mariozechner/pi-ai";
 import { config } from "../config.ts";
 
 export type { Tool, Message, AssistantMessage };
@@ -16,7 +16,13 @@ let _model: ReturnType<typeof getModel> | null = null;
 
 export function getConfiguredModel() {
   if (!_model) {
-    _model = getModel(config.llm.provider, config.llm.model);
+    // Provider and model come from runtime config (env vars).
+    // getModel's generics require literal types from the MODELS registry,
+    // so we assert here — an invalid combo will throw at runtime.
+    _model = getModel(
+      config.llm.provider as KnownProvider as any,
+      config.llm.model as any,
+    );
   }
   return _model;
 }

@@ -10,7 +10,7 @@ import { readFile } from "fs/promises";
 import { resolve } from "path";
 import { config } from "../config.ts";
 import { buildMemoryContext } from "./memory.ts";
-import { loadSession } from "./session.ts";
+import { loadSession, type SessionMessage } from "./session.ts";
 
 /**
  * Load an optional markdown file from the workspace root.
@@ -92,12 +92,7 @@ export async function buildSystemPrompt(): Promise<string> {
 export async function buildConversationHistory(
   sessionKey: string,
   maxMessages = 10,
-): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+): Promise<SessionMessage[]> {
   const history = await loadSession(sessionKey, maxMessages);
-  return history
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    }));
+  return history.filter((m) => m.role === "user" || m.role === "assistant");
 }
