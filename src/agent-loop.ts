@@ -126,13 +126,31 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
       });
     }
 
-    // Build message array in pi-ai format
+    // Build message array in pi-ai format.
+    // History entries are simplified {role, content} strings from our session log.
+    // pi-ai's transformMessages() expects AssistantMessage.content to be an array
+    // of content blocks (it calls .flatMap on it), so we must convert accordingly.
     const messages: Message[] = [
-      ...history.map((h: { role: string; content: string }) => ({
-        role: h.role as "user" | "assistant",
-        content: h.content,
-      })),
-      { role: "user" as const, content: userMessage },
+      ...history.map((h: { role: string; content: string }): Message => {
+        if (h.role === "assistant") {
+          // Construct a minimal AssistantMessage with content as block array
+          return {
+            role: "assistant" as const,
+            content: [{ type: "text" as const, text: h.content }],
+            // These fields are required by AssistantMessage but unknown for history entries.
+            // transformMessages checks provider/api/model to decide if it's the "same model" —
+            // empty strings ensure it takes the cross-model path (safe, strips signatures).
+            api: "" as any,
+            provider: "",
+            model: "",
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+            stopReason: "stop" as const,
+            timestamp: Date.now(),
+          };
+        }
+        return { role: "user" as const, content: h.content, timestamp: Date.now() };
+      }),
+      { role: "user" as const, content: userMessage, timestamp: Date.now() },
     ];
 
     let iterations = 0;
@@ -157,7 +175,7 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
             : "";
 
       const messagesForLLM = budgetWarning
-        ? [...messages, { role: "user" as const, content: budgetWarning }]
+        ? [...messages, { role: "user" as const, content: budgetWarning, timestamp: Date.now() }]
         : messages;
 
       // Think: call the LLM via pi-ai
@@ -165,21 +183,18 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
         return await callLLM(systemPrompt, messagesForLLM, TOOLS);
       });
 
-      // If the LLM returned an error, stop the loop
+      // If the LLM returned an error, throw so Inngest retries the step
       if (llmResponse.stopReason === "error") {
-        finalResponse = llmResponse.text || "(LLM returned an error)";
-        done = true;
-        break;
+        const errMsg = llmResponse.message.errorMessage || llmResponse.text || "Unknown LLM error";
+        throw new Error(`LLM error: ${errMsg}`);
       }
 
       const toolCalls = llmResponse.toolCalls;
 
       if (toolCalls.length > 0) {
-        // Add the full assistant content (text + tool calls) as returned by pi-ai
-        messages.push({
-          role: "assistant" as const,
-          content: llmResponse.content,
-        });
+        // Push the full AssistantMessage from pi-ai (includes provider, api, model,
+        // stopReason, usage, timestamp) — required by transformMessages() on next iteration
+        messages.push(llmResponse.message);
 
         // Act: execute each tool as a step
         for (const tc of toolCalls) {
@@ -189,19 +204,20 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
             // Validate arguments using pi-ai's TypeBox validation
             const tool = TOOLS.find((t) => t.name === tc.name);
             if (tool) {
-              validateToolArguments(tool, { name: tc.name, id: tc.id, arguments: tc.arguments });
+              validateToolArguments(tool, { type: "toolCall", name: tc.name, id: tc.id, arguments: tc.arguments });
             }
             return await executeTool(tc.name, tc.arguments);
           });
 
-          // Observe: feed result back in pi-ai's toolResult format
+          // Observe: feed result back in pi-ai's ToolResultMessage format
           messages.push({
             role: "toolResult" as const,
             toolCallId: tc.id,
             toolName: tc.name,
             content: [{ type: "text" as const, text: toolResult.result }],
             isError: toolResult.error || false,
-          } as any);
+            timestamp: Date.now(),
+          });
         }
       } else if (llmResponse.text) {
         // No tools — text response IS the reply
