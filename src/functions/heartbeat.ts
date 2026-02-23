@@ -151,7 +151,7 @@ Output ONLY the updated MEMORY.md content. No explanations or commentary.`;
 
       const response = await callLLM(
         "You are a memory maintenance assistant. Output only the updated MEMORY.md content.",
-        [{ role: "user", content: prompt }],
+        [{ role: "user" as const, content: prompt, timestamp: Date.now() }],
         [], // No tools needed
       );
 

@@ -6,27 +6,36 @@
  */
 
 import { getModel, complete, validateToolArguments } from "@mariozechner/pi-ai";
-import type { Tool, Message } from "@mariozechner/pi-ai";
+import type { Tool, Message, AssistantMessage, KnownProvider } from "@mariozechner/pi-ai";
 import { config } from "../config.ts";
 
-export type { Tool, Message };
+export type { Tool, Message, AssistantMessage };
 export { validateToolArguments };
 
 let _model: ReturnType<typeof getModel> | null = null;
 
 export function getConfiguredModel() {
   if (!_model) {
-    _model = getModel(config.llm.provider, config.llm.model);
+    // Provider and model come from runtime config (env vars).
+    // getModel's generics require literal types from the MODELS registry,
+    // so we assert here — an invalid combo will throw at runtime.
+    _model = getModel(
+      config.llm.provider as KnownProvider as any,
+      config.llm.model as any,
+    );
   }
   return _model;
 }
 
 export interface LLMResponse {
+  /** The full AssistantMessage from pi-ai — push this directly into the message array */
+  message: AssistantMessage;
+  /** Extracted text content for convenience */
   text: string;
+  /** Extracted tool calls for convenience */
   toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
-  content: any[];
-  usage?: { input?: number; output?: number; cost?: { total?: number } };
-  stopReason?: string;
+  usage: AssistantMessage["usage"];
+  stopReason: AssistantMessage["stopReason"];
 }
 
 export async function callLLM(
@@ -43,22 +52,21 @@ export async function callLLM(
   });
 
   const text = result.content
-    .filter((c: any) => c.type === "text")
-    .map((c: any) => c.text)
+    .filter((c) => c.type === "text")
+    .map((c) => (c as { type: "text"; text: string }).text)
     .join("");
 
   const toolCalls = result.content
-    .filter((c: any) => c.type === "toolCall")
-    .map((c: any) => ({
-      id: c.id,
-      name: c.name,
-      arguments: c.arguments || {},
-    }));
+    .filter((c) => c.type === "toolCall")
+    .map((c) => {
+      const tc = c as { type: "toolCall"; id: string; name: string; arguments: Record<string, any> };
+      return { id: tc.id, name: tc.name, arguments: tc.arguments || {} };
+    });
 
   return {
+    message: result,
     text,
     toolCalls,
-    content: result.content,
     usage: result.usage,
     stopReason: result.stopReason,
   };
