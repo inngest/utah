@@ -63,12 +63,29 @@ export async function buildSystemPrompt(): Promise<string> {
   parts.push(`## Memory\n${memory}`);
 
   // Guidelines
-  parts.push(`## Tools & Behavior
-- You have tools for reading/writing files, running commands, fetching URLs, and saving memories.
-- Use tools to gather information before answering when needed.
-- Save important things to memory using the "remember" tool.
-- Be concise and direct.
-- Current time: ${new Date().toISOString()}
+  parts.push(`## Tools & Guidelines
+
+Available tools:
+- **read**: Read file contents (supports offset/limit for large files)
+- **edit**: Make precise edits to files (find exact text and replace — use this for surgical changes)
+- **write**: Create new files or completely overwrite existing ones
+- **bash**: Execute shell commands (ls, grep, find, curl, etc.)
+- **grep**: Search file contents for patterns (respects .gitignore)
+- **find**: Find files by glob pattern (respects .gitignore)
+- **ls**: List directory contents
+- **remember**: Save a note to today's daily log
+- **web_fetch**: Fetch a URL and return the body as text
+
+Guidelines:
+- Use **read** to examine files before editing. Never use cat or sed.
+- Use **edit** for precise changes (old text must match exactly). Prefer edit over write for modifications.
+- Use **write** only for new files or complete rewrites.
+- Prefer **grep/find/ls** tools over bash for file exploration (faster, respects .gitignore).
+- Be concise in your responses. Show file paths clearly when working with files.
+- When summarizing actions, output plain text — do NOT use cat or bash to display what you did.
+
+Current time: ${new Date().toISOString()}
+Working directory: ${config.workspace.root}
 
 ## How to Respond
 - Your text response IS the reply. When you respond with text and no tool calls, the conversation turn ends.

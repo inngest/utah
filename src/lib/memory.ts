@@ -108,12 +108,28 @@ export async function appendDailyLog(entry: string): Promise<void> {
 }
 
 /**
+ * Maximum characters of memory context to include in the system prompt.
+ * ~10K chars ≈ ~2,500 tokens — leaves headroom for tools + conversation.
+ */
+const MAX_MEMORY_CHARS = 10_000;
+
+/**
+ * Truncate text to fit a character budget, keeping the tail (most recent).
+ */
+function truncateToFit(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return "...(truncated)...\n" + text.slice(-maxChars);
+}
+
+/**
  * Build the memory context block injected into the system prompt.
  * Loads long-term memory + yesterday's log + today's log.
+ *
+ * Priority: today's log > yesterday's log > long-term memory.
+ * Total is capped at MAX_MEMORY_CHARS to prevent context overflow.
  */
 export async function buildMemoryContext(): Promise<string> {
   const raw = await readMemory();
-  // Strip heartbeat timestamp — agent doesn't need to see it
   const memory = stripTimestamp(raw).trim();
   const today = await readDailyLog();
   const yesterday = await readDailyLog(
@@ -122,6 +138,7 @@ export async function buildMemoryContext(): Promise<string> {
 
   const parts: string[] = [];
 
+  // Add in priority order (lowest first — truncation removes from the top)
   if (memory) {
     parts.push(`### Long-Term Memory (MEMORY.md)\n${memory}`);
   }
@@ -132,5 +149,10 @@ export async function buildMemoryContext(): Promise<string> {
     parts.push(`### Today's Log\n${today}`);
   }
 
-  return parts.join("\n\n---\n\n") || "(No memory files found yet. Use the 'remember' tool to start building memory.)";
+  if (parts.length === 0) {
+    return "(No memory files found yet. Use the 'remember' tool to start building memory.)";
+  }
+
+  const full = parts.join("\n\n---\n\n");
+  return truncateToFit(full, MAX_MEMORY_CHARS);
 }

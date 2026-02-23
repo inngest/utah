@@ -1,109 +1,117 @@
 /**
- * Tools — capabilities the agent can use during the think/act/observe loop.
+ * Tools — pi-coding-agent's battle-tested coding tools, wrapped for Inngest steps.
  *
- * Uses TypeBox schemas (via pi-ai) for type-safe tool definitions
- * that work across LLM providers.
+ * Uses pi-coding-agent's tool implementations directly:
+ * - read: offset/limit, image support, binary detection, smart truncation
+ * - edit: exact text match + replace (surgical edits, not full file rewrites)
+ * - write: create/overwrite files with directory creation
+ * - bash: shell execution with configurable timeout and output truncation
+ * - grep: regex search respecting .gitignore
+ * - find: glob-based file discovery respecting .gitignore
+ * - ls: directory listing with tree display
+ *
+ * Plus custom tools specific to Utah (remember, web_fetch).
  */
 
 import { Type } from "@mariozechner/pi-ai";
 import type { Tool } from "@mariozechner/pi-ai";
-import { readFile, writeFile, readdir, mkdir } from "fs/promises";
-import { existsSync } from "fs";
-import { resolve, dirname } from "path";
-import { exec } from "child_process";
+import {
+  createReadTool,
+  createEditTool,
+  createWriteTool,
+  createBashTool,
+  createGrepTool,
+  createFindTool,
+  createLsTool,
+} from "@mariozechner/pi-coding-agent";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { config } from "../config.ts";
 import { appendDailyLog } from "./memory.ts";
 
-// --- Tool Definitions (TypeBox schemas) ---
+// --- Pi-coding-agent tools (configured for workspace) ---
 
-export const TOOLS: Tool[] = [
-  {
-    name: "read_file",
-    description: "Read the contents of a file",
-    parameters: Type.Object({
-      path: Type.String({ description: "File path (relative to workspace or absolute)" }),
-    }),
-  },
-  {
-    name: "write_file",
-    description: "Write content to a file (creates directories if needed)",
-    parameters: Type.Object({
-      path: Type.String({ description: "File path" }),
-      content: Type.String({ description: "Content to write" }),
-    }),
-  },
-  {
-    name: "list_directory",
-    description: "List files in a directory",
-    parameters: Type.Object({
-      path: Type.Optional(Type.String({ description: "Directory path (default: workspace root)" })),
-    }),
-  },
-  {
-    name: "run_command",
-    description: "Run a shell command and return stdout/stderr",
-    parameters: Type.Object({
-      command: Type.String({ description: "Shell command to execute" }),
-      cwd: Type.Optional(Type.String({ description: "Working directory (default: workspace)" })),
-    }),
-  },
-  {
-    name: "remember",
-    description:
-      "Save a note to today's daily log. Use for things you want to remember across conversations — decisions, facts, user preferences, task outcomes.",
-    parameters: Type.Object({
-      note: Type.String({ description: "The note to save" }),
-    }),
-  },
-  {
-    name: "web_fetch",
-    description: "Fetch a URL and return the response body as text",
-    parameters: Type.Object({
-      url: Type.String({ description: "URL to fetch" }),
-    }),
-  },
+// Cast to AgentTool<any>[] — the specific TSchema generics cause contravariance issues
+// but the tools are used dynamically (looked up by name) so this is safe.
+const piTools: AgentTool<any>[] = [
+  createReadTool(config.workspace.root) as AgentTool<any>,
+  createEditTool(config.workspace.root) as AgentTool<any>,
+  createWriteTool(config.workspace.root) as AgentTool<any>,
+  createBashTool(config.workspace.root) as AgentTool<any>,
+  createGrepTool(config.workspace.root) as AgentTool<any>,
+  createFindTool(config.workspace.root) as AgentTool<any>,
+  createLsTool(config.workspace.root) as AgentTool<any>,
 ];
+
+// --- Custom Utah tools ---
+
+const rememberTool: Tool = {
+  name: "remember",
+  description:
+    "Save a note to today's daily log. Use for things you want to remember across conversations — decisions, facts, user preferences, task outcomes.",
+  parameters: Type.Object({
+    note: Type.String({ description: "The note to save" }),
+  }),
+};
+
+const webFetchTool: Tool = {
+  name: "web_fetch",
+  description: "Fetch a URL and return the response body as text",
+  parameters: Type.Object({
+    url: Type.String({ description: "URL to fetch" }),
+  }),
+};
+
+// --- Exports ---
+
+/**
+ * All tools available to the agent.
+ * Pi-coding-agent tools use AgentTool (extends Tool with execute()).
+ * Custom tools are plain Tool definitions (executed via executeTool below).
+ */
+export const TOOLS: Tool[] = [...piTools, rememberTool, webFetchTool];
+
+/**
+ * Map of pi-coding-agent tools by name for direct execution.
+ */
+const piToolMap = new Map<string, AgentTool>(piTools.map((t) => [t.name, t]));
 
 // --- Tool Execution ---
 
-interface ToolResult {
+export interface ToolResult {
+  /** Text content returned to the LLM */
   result: string;
+  /** Whether this result represents an error */
   error?: boolean;
 }
 
-function resolvePath(filePath: string): string {
-  return filePath.startsWith("/") ? filePath : resolve(config.workspace.root, filePath);
-}
-
+/**
+ * Execute a tool by name.
+ *
+ * Pi-coding-agent tools are called via their execute() method.
+ * Custom tools (remember, web_fetch) are handled inline.
+ */
 export async function executeTool(
+  toolCallId: string,
   name: string,
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
   try {
+    // Check if it's a pi-coding-agent tool
+    const piTool = piToolMap.get(name);
+    if (piTool) {
+      const result = await piTool.execute(toolCallId, args);
+
+      // Convert AgentToolResult to our ToolResult format
+      const text = result.content
+        .filter((c) => c.type === "text")
+        .map((c) => (c as { type: "text"; text: string }).text)
+        .join("\n");
+
+      return { result: text || "(no output)" };
+    }
+
+    // Custom tools
     switch (name) {
-      case "read_file": {
-        const fullPath = resolvePath(args.path as string);
-        const content = await readFile(fullPath, "utf-8");
-        return { result: content.slice(0, 50_000) };
-      }
-      case "write_file": {
-        const fullPath = resolvePath(args.path as string);
-        await mkdir(dirname(fullPath), { recursive: true });
-        await writeFile(fullPath, args.content as string, "utf-8");
-        return { result: `Written to ${args.path}` };
-      }
-      case "list_directory": {
-        const dirPath = resolvePath((args.path as string) || ".");
-        if (!existsSync(dirPath)) return { result: "Directory not found", error: true };
-        const entries = await readdir(dirPath, { withFileTypes: true });
-        const list = entries.map((e) => `${e.isDirectory() ? "📁" : "📄"} ${e.name}`);
-        return { result: list.join("\n") || "(empty directory)" };
-      }
-      case "run_command": {
-        const cwd = resolvePath((args.cwd as string) || ".");
-        const output = await runShellCommand(args.command as string, cwd);
-        return { result: output.slice(0, 50_000) };
-      }
       case "remember": {
         await appendDailyLog(args.note as string);
         return { result: "Saved to today's log." };
@@ -111,7 +119,7 @@ export async function executeTool(
       case "web_fetch": {
         const res = await fetch(args.url as string, {
           signal: AbortSignal.timeout(30_000),
-          headers: { "User-Agent": "InngstAgent/1.0" },
+          headers: { "User-Agent": "Utah-Agent/1.0" },
         });
         const text = await res.text();
         return { result: text.slice(0, 50_000) };
@@ -120,18 +128,9 @@ export async function executeTool(
         return { result: `Unknown tool: ${name}`, error: true };
     }
   } catch (err) {
-    return { result: `Error: ${err instanceof Error ? err.message : String(err)}`, error: true };
+    return {
+      result: `Error: ${err instanceof Error ? err.message : String(err)}`,
+      error: true,
+    };
   }
-}
-
-function runShellCommand(command: string, cwd: string): Promise<string> {
-  return new Promise((resolve) => {
-    exec(command, { cwd, timeout: 30_000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) {
-        resolve(`Exit code: ${err.code}\nstdout: ${stdout}\nstderr: ${stderr}`);
-      } else {
-        resolve(stdout + (stderr ? `\nstderr: ${stderr}` : ""));
-      }
-    });
-  });
 }

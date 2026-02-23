@@ -163,6 +163,7 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
     let totalToolCalls = 0;
     let finalResponse = "";
     let done = false;
+    let hasCompactedThisRun = false;
 
     while (!done && iterations < config.loop.maxIterations) {
       iterations++;
@@ -189,9 +190,47 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
         return await callLLM(systemPrompt, messagesForLLM, TOOLS);
       });
 
-      // If the LLM returned an error, throw so Inngest retries the step
+      // If the LLM returned an error, check if it's a context overflow
       if (llmResponse.stopReason === "error") {
         const errMsg = llmResponse.message.errorMessage || llmResponse.text || "Unknown LLM error";
+        const isOverflow = /context.?overflow|prompt.?too.?large|too many tokens|maximum context|token limit/i.test(errMsg);
+
+        if (isOverflow && !hasCompactedThisRun) {
+          // Context overflow — force-compact the conversation and retry this iteration
+          console.log(`[loop] Context overflow detected, force-compacting...`);
+          hasCompactedThisRun = true;
+
+          // Aggressive pruning: keep only the last few messages
+          const keepCount = Math.min(6, messages.length);
+          const toSummarize = messages.slice(0, messages.length - keepCount);
+          const toKeep = messages.slice(-keepCount);
+
+          if (toSummarize.length > 0) {
+            const summaryText = toSummarize
+              .map((m) => {
+                const role = (m as any).role?.toUpperCase() || "UNKNOWN";
+                const text = typeof (m as any).content === "string"
+                  ? (m as any).content
+                  : "[complex content]";
+                return `${role}: ${typeof text === "string" ? text.slice(0, 200) : ""}`;
+              })
+              .join("\n");
+
+            messages.length = 0;
+            messages.push({
+              role: "user" as const,
+              content: `[Previous conversation was too long and has been summarized]\n\n${summaryText.slice(0, 2000)}`,
+              timestamp: Date.now(),
+            });
+            messages.push(...toKeep);
+          }
+
+          // Don't increment iterations for the overflow recovery
+          iterations--;
+          continue;
+        }
+
+        // Non-overflow error — throw so Inngest retries
         throw new Error(`LLM error: ${errMsg}`);
       }
 
@@ -212,7 +251,7 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
             if (tool) {
               validateToolArguments(tool, { type: "toolCall", name: tc.name, id: tc.id, arguments: tc.arguments });
             }
-            return await executeTool(tc.name, tc.arguments);
+            return await executeTool(tc.id, tc.name, tc.arguments);
           });
 
           // Observe: feed result back in pi-ai's ToolResultMessage format
