@@ -32,19 +32,14 @@ export async function sendReply({ response, destination, channelMeta }: SendRepl
   const chunks = splitMessage(response);
 
   for (let i = 0; i < chunks.length; i++) {
-    const replyTo = i === 0 && messageId ? parseInt(messageId) : undefined;
-
     try {
       await sendMessage(chatId, markdownToTelegramHTML(chunks[i]), {
         parseMode: "HTML",
-        replyToMessageId: replyTo,
       });
     } catch (err: any) {
       // Fallback to plain text if HTML parsing fails
       if (err.message?.includes("can't parse entities")) {
-        await sendMessage(chatId, stripMarkdown(chunks[i]), {
-          replyToMessageId: replyTo,
-        });
+        await sendMessage(chatId, stripMarkdown(chunks[i]));
       } else {
         throw err;
       }
