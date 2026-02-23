@@ -40,16 +40,13 @@ export async function telegramAPI(
 export async function sendMessage(
   chatId: string,
   text: string,
-  options: { parseMode?: string; replyToMessageId?: number } = {},
+  options: { parseMode?: string } = {},
 ): Promise<any> {
   const body: Record<string, unknown> = {
     chat_id: chatId,
     text,
   };
   if (options.parseMode) body.parse_mode = options.parseMode;
-  if (options.replyToMessageId) {
-    body.reply_parameters = { message_id: options.replyToMessageId };
-  }
   return telegramAPI("sendMessage", body);
 }
 

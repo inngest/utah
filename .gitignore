@@ -7,3 +7,5 @@ dist/
 # Workspace: keep context templates, ignore runtime data
 workspace/sessions/
 workspace/memory.md
+# Test workspaces
+workspace-*
