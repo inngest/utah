@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mariozechner/pi-agent-core": "^0.54.2",
     "@mariozechner/pi-ai": "latest",
     "@mariozechner/pi-coding-agent": "^0.54.0",
     "@sinclair/typebox": "^0.34.0",
