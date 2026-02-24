@@ -32,12 +32,12 @@ async function main() {
   console.log(`   Workspace: ${config.workspace.root}`);
   console.log(`   Functions: ${functions.length}`);
 
-  await connect({ apps: [{ client: inngest, functions }] });
+  await connect({
+    apps: [{ client: inngest, functions }],
+    handleShutdownSignals: ["SIGTERM", "SIGINT"],
+  });
   console.log(`   Inngest: WebSocket connected`);
   console.log(`\n✅ ${config.agent.name} is alive\n`);
-
-  process.on("SIGTERM", () => process.exit(0));
-  process.on("SIGINT", () => process.exit(0));
 }
 
 main().catch((e) => {
