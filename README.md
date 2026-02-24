@@ -14,7 +14,7 @@ A durable AI agent built with [Inngest](https://inngest.com). No framework. No L
 ## Architecture
 
 ```
-Telegram → Inngest Cloud (webhook + transform) → WebSocket → Local Worker → Anthropic → Reply Event → Telegram API
+Channel (e.g. Telegram) → Inngest Cloud (webhook + transform) → WebSocket → Local Worker → LLM (Anthropic/OpenAI/Google) → Reply Event → Channel API
 ```
 
 The worker connects to Inngest Cloud via WebSocket. No public endpoint. No ngrok. No VPS. Messages flow through Inngest as events, and the agent processes them locally with full filesystem access.
@@ -42,28 +42,7 @@ The worker connects to Inngest Cloud via WebSocket. No public endpoint. No ngrok
    - **Event Key** (for sending events)
    - **Signing Key** (for authenticating your worker)
 
-### 3. Set Up the Webhook Transform
-
-This is what connects Telegram to your agent. Telegram sends raw webhook payloads to Inngest, and a transform converts them into typed agent events.
-
-1. In the Inngest dashboard, go to **Settings → Webhooks → Add Webhook**
-2. Enable the **Transform** toggle
-3. Paste the transform function from [`src/transforms/telegram.ts`](src/transforms/telegram.ts) (the plain JS version in the comment block)
-4. Save and copy the **Webhook URL**
-
-### 4. Point Telegram at Inngest
-
-Tell Telegram to send updates to your Inngest webhook:
-
-```bash
-curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
-  -H "Content-Type: application/json" \
-  -d '{"url": "<YOUR_INNGEST_WEBHOOK_URL>"}'
-```
-
-You should see `{"ok": true, "result": true, "description": "Webhook was set"}`.
-
-### 5. Configure and Run
+### 3. Configure and Run
 
 ```bash
 git clone https://github.com/inngest/agent-example-utah
@@ -92,35 +71,51 @@ npx inngest-cli@latest dev &
 npm run dev
 ```
 
-Send a message to your bot on Telegram. You should see the agent process it in the terminal and reply.
+On startup, the worker automatically:
+
+1. Creates (or updates) an Inngest webhook with the Telegram [transform](src/channels/telegram/transform.ts)
+2. Points the Telegram bot's webhook at the Inngest webhook URL
+
+No manual webhook setup needed. Send a message to your bot on Telegram and you should see the agent process it in the terminal and reply.
 
 ## Project Structure
 
 ```
 src/
-├── worker.ts              # Entry point — connect() or serve()
-├── client.ts              # Inngest client
-├── config.ts              # Configuration from env vars
-├── agent-loop.ts          # Core think → act → observe cycle
+├── worker.ts                  # Entry point — connect() or serve()
+├── client.ts                  # Inngest client
+├── config.ts                  # Configuration from env vars
+├── agent-loop.ts              # Core think → act → observe cycle
+├── setup.ts                   # Channel setup orchestration
 ├── lib/
-│   ├── llm.ts             # pi-ai wrapper (multi-provider: Anthropic, OpenAI, Google)
-│   ├── tools.ts           # Tool definitions (TypeBox schemas) + execution
-│   ├── context.ts         # System prompt builder with workspace file injection
-│   ├── session.ts         # JSONL session persistence
-│   └── compaction.ts      # LLM-powered conversation summarization
+│   ├── llm.ts                 # pi-ai wrapper (multi-provider: Anthropic, OpenAI, Google)
+│   ├── tools.ts               # Tool definitions (TypeBox schemas) + execution
+│   ├── context.ts             # System prompt builder with workspace file injection
+│   ├── session.ts             # JSONL session persistence
+│   ├── memory.ts              # File-based memory system (daily logs + distillation)
+│   └── compaction.ts          # LLM-powered conversation summarization
 ├── functions/
-│   ├── message.ts         # Main agent function (singleton + cancelOn)
-│   ├── telegram-reply.ts  # Send responses to Telegram (with HTML fallback)
-│   ├── telegram-typing.ts # Typing indicator (fire-and-forget)
-│   └── failure-handler.ts # Global error handler with Telegram notifications
-└── transforms/
-    └── telegram.ts        # Webhook transform (paste into Inngest dashboard)
-workspace/                   # Agent workspace (persisted across runs)
-├── IDENTITY.md            # Agent identity and personality
-├── SOUL.md                # Behavioral guidelines
-├── USER.md                # User information
-├── MEMORY.md              # Long-term memory (agent-writable)
-└── sessions/              # JSONL conversation files (gitignored)
+│   ├── message.ts             # Main agent function (singleton + cancelOn)
+│   ├── send-reply.ts          # Channel-agnostic reply dispatch
+│   ├── acknowledge-message.ts # Message acknowledgment (typing indicator, etc.)
+│   ├── heartbeat.ts           # Cron-based memory maintenance
+│   └── failure-handler.ts     # Global error handler with notifications
+└── channels/
+    ├── types.ts               # ChannelHandler interface
+    ├── index.ts               # Channel registry
+    ├── setup-helpers.ts       # Inngest REST API helpers for webhook setup
+    └── telegram/
+        ├── handler.ts         # Telegram ChannelHandler implementation
+        ├── api.ts             # Telegram Bot API client
+        ├── setup.ts           # Webhook setup automation
+        ├── transform.ts       # Webhook transform (paste into Inngest dashboard)
+        └── format.ts          # Markdown → Telegram HTML conversion
+workspace/                       # Agent workspace (persisted across runs)
+├── SOUL.md                    # Agent personality and behavioral guidelines
+├── USER.md                    # User information
+├── MEMORY.md                  # Long-term memory (agent-writable)
+├── memory/                    # Daily logs (YYYY-MM-DD.md, auto-managed)
+└── sessions/                  # JSONL conversation files (gitignored)
 ```
 
 ## How It Works
@@ -130,7 +125,7 @@ workspace/                   # Agent workspace (persisted across runs)
 The core is a while loop where each iteration is an Inngest step:
 
 1. **Think** — `step.run("think")` calls the LLM via pi-ai's `complete()`
-2. **Act** — if the LLM wants tools, each tool runs as `step.run("tool-read_file")`
+2. **Act** — if the LLM wants tools, each tool runs as `step.run("tool-read")`
 3. **Observe** — tool results are fed back into the conversation
 4. **Repeat** — until the LLM responds with text (no tools) or max iterations
 
@@ -143,8 +138,9 @@ One incoming message triggers multiple independent functions:
 | Function | Purpose | Config |
 |---|---|---|
 | `agent-handle-message` | Run the agent loop | Singleton per chat, cancel on new message |
-| `telegram-typing-indicator` | Show "typing..." immediately | No retries (best effort) |
-| `telegram-send-reply` | Format and send the response | 3 retries, HTML fallback |
+| `acknowledge-message` | Show "typing..." immediately | No retries (best effort) |
+| `send-reply` | Format and send the response | 3 retries, channel dispatch |
+| `agent-heartbeat` | Distill daily logs into long-term memory | Cron (every 30 min) |
 | `global-failure-handler` | Catch errors, notify user | Triggered by `inngest/function.failed` |
 
 ### Workspace Context Injection
@@ -153,12 +149,20 @@ The agent reads markdown files from the workspace directory and injects them int
 
 | File | Purpose |
 |---|---|
-| `IDENTITY.md` | Agent name, role, personality |
-| `SOUL.md` | Behavioral guidelines, tone, boundaries |
+| `SOUL.md` | Agent personality, behavioral guidelines, tone, boundaries |
 | `USER.md` | Info about the user (name, timezone, preferences) |
-| `MEMORY.md` | Long-term memory the agent can read and update |
+| `MEMORY.md` | Curated long-term memory (agent-writable) |
 
-Edit these files to customize your agent's personality and knowledge. The agent can also update `MEMORY.md` using the `write_file` tool to remember things across conversations.
+Edit these files to customize your agent's personality and knowledge. The agent can also update `MEMORY.md` using the `write` tool to remember things across conversations.
+
+### Memory System
+
+The agent has a two-tier memory system:
+
+- **Daily logs** (`workspace/memory/YYYY-MM-DD.md`) — append-only notes written via the `remember` tool during conversations
+- **Long-term memory** (`workspace/MEMORY.md`) — curated summary distilled from daily logs by the heartbeat function
+
+The `agent-heartbeat` function runs on a cron schedule (default: every 30 minutes). It checks if daily logs have accumulated enough content, then uses the LLM to distill them into `MEMORY.md`. Old daily logs are pruned after a configurable retention period (default: 30 days).
 
 ### Conversation Compaction
 
@@ -182,11 +186,12 @@ Long tool results bloat the conversation context and cause the LLM to lose focus
 
 ### Adding New Channels
 
-The agent is channel-agnostic. To add Slack, Discord, or any other channel:
+The agent is channel-agnostic. Each channel implements a `ChannelHandler` interface (`src/channels/types.ts`) with methods for sending replies, acknowledging messages, and setup. To add Slack, Discord, or any other channel:
 
-1. Create a webhook transform that converts the channel's payload to `agent.message.received`
-2. Create a reply function that listens for `agent.reply.ready` with a channel filter
-3. That's it — the agent loop doesn't change
+1. Create a new directory under `src/channels/` with a handler implementing `ChannelHandler`
+2. Add a webhook transform that converts the channel's payload to `agent.message.received`
+3. Register the channel in `src/channels/index.ts`
+4. That's it — the agent loop, reply dispatch, and acknowledgment functions are all channel-agnostic
 
 ## Key Inngest Features Used
 
