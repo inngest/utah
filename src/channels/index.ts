@@ -13,12 +13,13 @@
 
 import type { ChannelHandler } from "./types.ts";
 import * as telegram from "./telegram/handler.ts";
+import * as slack from "./slack/handler.ts";
 
 // --- Channel Registry ---
 
 const CHANNELS: Record<string, ChannelHandler> = {
   telegram,
-  // slack: slackHandler,
+  slack,
   // discord: discordHandler,
 };
 

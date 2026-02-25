@@ -8,7 +8,7 @@ A durable AI agent built with [Inngest](https://inngest.com). No framework. No L
 - 🔁 **Automatic retries** — LLM API timeouts are handled by Inngest, not your code
 - 🔒 **Singleton concurrency** — one conversation at a time per chat, no race conditions
 - ⚡ **Cancel on new message** — user sends again? Current run cancels, new one starts
-- 📡 **Telegram integration** — webhook transforms + reply functions, all event-driven
+- 📡 **Multi-channel** — Slack, Telegram, and more via a simple channel interface
 - 🏠 **Local development** — runs on your machine via `connect()`, no server needed
 
 ## Architecture
@@ -24,25 +24,18 @@ The worker connects to Inngest Cloud via WebSocket. No public endpoint. No ngrok
 - **Node.js 23+** (uses native TypeScript strip-types)
 - **Anthropic API key** ([console.anthropic.com](https://console.anthropic.com))
 - **Inngest account** ([app.inngest.com](https://app.inngest.com))
-- **Telegram bot** (created via [@BotFather](https://t.me/BotFather))
+- **At least one channel** configured (see [Channels](#channels) below)
 
 ## Setup
 
-### 1. Create a Telegram Bot
-
-1. Open Telegram and message [@BotFather](https://t.me/BotFather)
-2. Send `/newbot` and follow the prompts
-3. Copy the bot token (looks like `123456:ABC-DEF...`)
-4. Send `/setprivacy` → select your bot → `Disable` (so the bot receives all messages in groups)
-
-### 2. Create an Inngest Account
+### 1. Create an Inngest Account
 
 1. Sign up at [app.inngest.com](https://app.inngest.com/sign-up)
 2. Go to **Settings → Keys** and copy your:
    - **Event Key** (for sending events)
    - **Signing Key** (for authenticating your worker)
 
-### 3. Configure and Run
+### 2. Configure and Run
 
 ```bash
 git clone https://github.com/inngest/agent-example-utah
@@ -55,10 +48,11 @@ Edit `.env` with your keys:
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
-TELEGRAM_BOT_TOKEN=123456:ABC...
 INNGEST_EVENT_KEY=...
 INNGEST_SIGNING_KEY=signkey-prod-...
 ```
+
+Then add the environment variables for your channel(s) — see setup guides below.
 
 Start the worker:
 
@@ -71,12 +65,14 @@ npx inngest-cli@latest dev &
 npm run dev
 ```
 
-On startup, the worker automatically:
+On startup, the worker automatically sets up webhooks and transforms for each configured channel.
 
-1. Creates (or updates) an Inngest webhook with the Telegram [transform](src/channels/telegram/transform.ts)
-2. Points the Telegram bot's webhook at the Inngest webhook URL
+## Channels
 
-No manual webhook setup needed. Send a message to your bot on Telegram and you should see the agent process it in the terminal and reply.
+The agent supports multiple messaging channels. Each channel has its own setup guide:
+
+- **[Telegram](src/channels/telegram/README.md)** — Fully automated setup. Just add your bot token and run.
+- **[Slack](src/channels/slack/README.md)** — Requires creating a Slack app and configuring Event Subscriptions.
 
 ## Project Structure
 
@@ -104,12 +100,12 @@ src/
     ├── types.ts               # ChannelHandler interface
     ├── index.ts               # Channel registry
     ├── setup-helpers.ts       # Inngest REST API helpers for webhook setup
-    └── telegram/
-        ├── handler.ts         # Telegram ChannelHandler implementation
-        ├── api.ts             # Telegram Bot API client
+    └── <channel-name>/        # A channel implementation (see README for setup)
+        ├── handler.ts         # ChannelHandler implementation
+        ├── api.ts             # API client
         ├── setup.ts           # Webhook setup automation
-        ├── transform.ts       # Webhook transform (paste into Inngest dashboard)
-        └── format.ts          # Markdown → Telegram HTML conversion
+        ├── transform.ts       # Webhook transform
+        └── format.ts          # Formatting for channel messages
 workspace/                       # Agent workspace (persisted across runs)
 ├── SOUL.md                    # Agent personality and behavioral guidelines
 ├── USER.md                    # User information
@@ -135,23 +131,23 @@ Inngest auto-indexes duplicate step IDs in loops (`think:0`, `think:1`, etc.), s
 
 One incoming message triggers multiple independent functions:
 
-| Function | Purpose | Config |
-|---|---|---|
-| `agent-handle-message` | Run the agent loop | Singleton per chat, cancel on new message |
-| `acknowledge-message` | Show "typing..." immediately | No retries (best effort) |
-| `send-reply` | Format and send the response | 3 retries, channel dispatch |
-| `agent-heartbeat` | Distill daily logs into long-term memory | Cron (every 30 min) |
-| `global-failure-handler` | Catch errors, notify user | Triggered by `inngest/function.failed` |
+| Function                 | Purpose                                  | Config                                    |
+| ------------------------ | ---------------------------------------- | ----------------------------------------- |
+| `agent-handle-message`   | Run the agent loop                       | Singleton per chat, cancel on new message |
+| `acknowledge-message`    | Show "typing..." immediately             | No retries (best effort)                  |
+| `send-reply`             | Format and send the response             | 3 retries, channel dispatch               |
+| `agent-heartbeat`        | Distill daily logs into long-term memory | Cron (every 30 min)                       |
+| `global-failure-handler` | Catch errors, notify user                | Triggered by `inngest/function.failed`    |
 
 ### Workspace Context Injection
 
 The agent reads markdown files from the workspace directory and injects them into the system prompt:
 
-| File | Purpose |
-|---|---|
-| `SOUL.md` | Agent personality, behavioral guidelines, tone, boundaries |
-| `USER.md` | Info about the user (name, timezone, preferences) |
-| `MEMORY.md` | Curated long-term memory (agent-writable) |
+| File        | Purpose                                                    |
+| ----------- | ---------------------------------------------------------- |
+| `SOUL.md`   | Agent personality, behavioral guidelines, tone, boundaries |
+| `USER.md`   | Info about the user (name, timezone, preferences)          |
+| `MEMORY.md` | Curated long-term memory (agent-writable)                  |
 
 Edit these files to customize your agent's personality and knowledge. The agent can also update `MEMORY.md` using the `write` tool to remember things across conversations.
 
@@ -186,12 +182,25 @@ Long tool results bloat the conversation context and cause the LLM to lose focus
 
 ### Adding New Channels
 
-The agent is channel-agnostic. Each channel implements a `ChannelHandler` interface (`src/channels/types.ts`) with methods for sending replies, acknowledging messages, and setup. To add Slack, Discord, or any other channel:
+The agent is channel-agnostic. Each channel implements a `ChannelHandler` interface (`src/channels/types.ts`) with methods for sending replies, acknowledging messages, and setup. Each channel directory follows the same structure:
 
-1. Create a new directory under `src/channels/` with a handler implementing `ChannelHandler`
-2. Add a webhook transform that converts the channel's payload to `agent.message.received`
-3. Register the channel in `src/channels/index.ts`
-4. That's it — the agent loop, reply dispatch, and acknowledgment functions are all channel-agnostic
+```
+src/channels/<name>/
+├── handler.ts      # ChannelHandler implementation (sendReply, acknowledge)
+├── api.ts          # API client for the channel's platform
+├── setup.ts        # Webhook setup automation
+├── transform.ts    # Plain JS transform for Inngest webhook
+└── format.ts       # Markdown → channel-specific format conversion
+```
+
+To add Discord, WhatsApp, or any other channel:
+
+1. Create a new directory under `src/channels/` following the structure above
+2. Implement the `ChannelHandler` interface in `handler.ts`
+3. Write a webhook transform that converts the channel's payload to `agent.message.received`
+4. Register the channel in `src/channels/index.ts`
+
+The agent loop, reply dispatch, and acknowledgment functions are all channel-agnostic — no changes needed outside `src/channels/`.
 
 ## Key Inngest Features Used
 
