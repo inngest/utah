@@ -11,6 +11,9 @@
  */
 export function markdownToSlackMrkdwn(text: string): string {
   return text
+    // Headings: ## Heading -> *Heading*
+    .replace(/^#{1,6}\s+(.+)$/gm, "*$1*")
+
     // Bold: **text** or __text__ -> *text*
     .replace(/\*\*(.*?)\*\*/g, "*$1*")
     .replace(/__(.*?)__/g, "*$1*")
@@ -37,6 +40,7 @@ export function markdownToSlackMrkdwn(text: string): string {
  */
 export function stripMarkdown(text: string): string {
   return text
+    .replace(/^#{1,6}\s+(.+)$/gm, "$1")
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/\*(.*?)\*/g, "$1")
     .replace(/__(.*?)__/g, "$1")
