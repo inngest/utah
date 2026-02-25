@@ -9,10 +9,19 @@
  * since it executes in Inngest's sandboxed transform runtime.
  */
 
+// Plain JS response handler — responds to Slack's URL verification challenge
+export const RESPONSE_SOURCE = `function respond(body, headers) {
+  var parsed = JSON.parse(body);
+  if (parsed && parsed.type === "url_verification" && parsed.challenge) {
+    return { status: 200, headers: { "Content-Type": "text/plain" }, body: parsed.challenge };
+  }
+}`;
+
 // Plain JS transform — synced to Inngest webhook by setup script
 export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
   try {
-    // Handle Slack URL verification challenge
+    // URL verification is handled by the response function;
+    // return a no-op event so the transform doesn't error
     if (evt.type === "url_verification") {
       return { name: "slack/url.verification", data: { challenge: evt.challenge } };
     }
@@ -23,9 +32,9 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
     }
 
     var event = evt.event;
-    
-    // Only process message events with text (ignore bot messages, file uploads, etc)
-    if (event.type !== "message" || !event.text || event.subtype || event.bot_id) {
+
+    // Only process message and app_mention events with text (ignore bot messages, file uploads, etc)
+    if ((event.type !== "message" && event.type !== "app_mention") || !event.text || event.subtype || event.bot_id) {
       return { name: "slack/message.unsupported", data: evt };
     }
 
@@ -39,6 +48,7 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
     var sessionKey = "slack-" + channelId + (threadTs ? "-" + threadTs : "");
 
     return {
+      id: \`slack.\${event.type}.\${evt.event_id}\`,
       name: "agent.message.received",
       data: {
         message: messageText,
@@ -58,6 +68,7 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
           teamId: evt.team_id,
           eventId: evt.event_id,
           eventTime: evt.event_time,
+          eventType: event.type,
           channelType: event.channel_type,
           threadTs: threadTs
         }
@@ -91,10 +102,16 @@ interface SlackEvent {
   };
 }
 
-export function transform(evt: SlackEvent): { name: string; data: any } | undefined {
-  // Handle URL verification challenge
+export function transform(
+  evt: SlackEvent,
+): { id?: string; name: string; data: any } | undefined {
+  // URL verification is handled by the response function;
+  // return a no-op event so the transform doesn't error
   if (evt.type === "url_verification") {
-    return { name: "slack/url.verification", data: { challenge: evt.challenge } };
+    return {
+      name: "slack/url.verification",
+      data: { challenge: evt.challenge },
+    };
   }
 
   // Only process event callbacks
@@ -103,9 +120,14 @@ export function transform(evt: SlackEvent): { name: string; data: any } | undefi
   }
 
   const event = evt.event;
-  
-  // Only process message events with text (ignore bot messages, file uploads, etc)
-  if (event.type !== "message" || !event.text || event.subtype || event.bot_id) {
+
+  // Only process message and app_mention events with text (ignore bot messages, file uploads, etc)
+  if (
+    (event.type !== "message" && event.type !== "app_mention") ||
+    !event.text ||
+    event.subtype ||
+    event.bot_id
+  ) {
     return { name: "slack/message.unsupported", data: evt };
   }
 
@@ -133,5 +155,9 @@ export function transform(evt: SlackEvent): { name: string; data: any } | undefi
     },
   };
 
-  return { name: "agent.message.received", data };
+  return {
+    id: `slack.${event.type}.${evt.event_id}`,
+    name: "agent.message.received",
+    data,
+  };
 }

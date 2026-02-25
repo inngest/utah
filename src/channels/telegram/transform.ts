@@ -25,6 +25,7 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
     var displayName = lastName ? firstName + " " + lastName : firstName;
 
     return {
+      id: \`telegram.\${msg.message_id}\`,
       name: "agent.message.received",
       data: {
         message: msg.text,
@@ -65,22 +66,32 @@ interface TelegramUpdate {
   message?: {
     message_id: number;
     message_thread_id?: number;
-    from?: { id: number; first_name: string; last_name?: string; username?: string };
+    from?: {
+      id: number;
+      first_name: string;
+      last_name?: string;
+      username?: string;
+    };
     chat: { id: number; type: string; title?: string };
     text?: string;
     reply_to_message?: { message_id: number; text?: string };
   };
 }
 
-export function transform(evt: TelegramUpdate): { name: string; data: AgentMessageData } | undefined {
+export function transform(
+  evt: TelegramUpdate,
+): { id?: string; name: string; data: AgentMessageData } | undefined {
   if (!evt.message?.text) return undefined;
 
   const msg = evt.message;
   const text = msg.text!; // Safe — guarded by the check above
   const chatId = String(msg.chat.id);
-  const displayName = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Unknown";
+  const displayName =
+    [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") ||
+    "Unknown";
 
   return {
+    id: `telegram.${msg.message_id}`,
     name: "agent.message.received",
     data: {
       message: text,
@@ -94,15 +105,19 @@ export function transform(evt: TelegramUpdate): { name: string; data: AgentMessa
       destination: {
         chatId,
         messageId: String(msg.message_id),
-        threadId: msg.message_thread_id ? String(msg.message_thread_id) : undefined,
+        threadId: msg.message_thread_id
+          ? String(msg.message_thread_id)
+          : undefined,
       },
       channelMeta: {
         chatType: msg.chat.type,
         chatTitle: msg.chat.title,
-        replyToMessage: msg.reply_to_message ? {
-          messageId: msg.reply_to_message.message_id,
-          text: msg.reply_to_message.text,
-        } : undefined,
+        replyToMessage: msg.reply_to_message
+          ? {
+              messageId: msg.reply_to_message.message_id,
+              text: msg.reply_to_message.text,
+            }
+          : undefined,
         forumTopicId: msg.message_thread_id,
       },
     },
