@@ -10,6 +10,7 @@ import { markdownToSlackMrkdwn, stripMarkdown, splitMessage } from "./format.ts"
  * Slack-specific metadata passed through channelMeta.
  */
 interface SlackMeta {
+  channelId?: string;
   teamId?: string;
   eventId?: string;
   eventTime?: number;
@@ -22,19 +23,22 @@ interface SlackMeta {
  * message splitting, and plain text fallback.
  */
 export async function sendReply({ response, destination, channelMeta }: SendReplyParams): Promise<void> {
-  const { chatId, threadId } = destination;
+  const { threadId } = destination;
+  const meta = channelMeta as SlackMeta;
+  // Use the raw Slack channel ID from channelMeta (chatId is a compound routing key)
+  const channel = meta.channelId ?? destination.chatId;
 
   const chunks = splitMessage(response);
 
   for (const chunk of chunks) {
     try {
-      await postMessage(chatId, markdownToSlackMrkdwn(chunk), {
+      await postMessage(channel, markdownToSlackMrkdwn(chunk), {
         threadTs: threadId,
       });
     } catch (err: any) {
       // Fallback to plain text if formatting fails
       if (err.message?.includes("invalid_blocks") || err.message?.includes("invalid_attachments")) {
-        await postMessage(chatId, stripMarkdown(chunk), {
+        await postMessage(channel, stripMarkdown(chunk), {
           threadTs: threadId,
         });
       } else {
@@ -47,10 +51,13 @@ export async function sendReply({ response, destination, channelMeta }: SendRepl
 /**
  * Acknowledge message receipt — Slack adds a 👀 emoji reaction.
  */
-export async function acknowledge({ destination }: AcknowledgeParams): Promise<void> {
-  const { chatId, messageId } = destination;
+export async function acknowledge({ destination, channelMeta }: AcknowledgeParams): Promise<void> {
+  const meta = channelMeta as SlackMeta;
+  // Use the raw Slack channel ID from channelMeta (chatId is a compound routing key)
+  const channel = meta.channelId ?? destination.chatId;
+  const { messageId } = destination;
   if (messageId) {
-    await addReaction(chatId, messageId, "eyes");
+    await addReaction(channel, messageId, "eyes");
   }
 }
 

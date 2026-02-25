@@ -20,62 +20,38 @@ export const RESPONSE_SOURCE = `function respond(body, headers) {
 // Plain JS transform — synced to Inngest webhook by setup script
 export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
   try {
-    // URL verification is handled by the response function;
-    // return a no-op event so the transform doesn't error
+    if (headers && headers["x-slack-retry-num"]) {
+      return { name: "slack/event.retry", data: {} };
+    }
     if (evt.type === "url_verification") {
       return { name: "slack/url.verification", data: { challenge: evt.challenge } };
     }
-
-    // Only process message events
     if (evt.type !== "event_callback" || !evt.event) {
       return { name: "slack/event.unsupported", data: evt };
     }
-
-    var event = evt.event;
-
-    // Only process message and app_mention events with text (ignore bot messages, file uploads, etc)
-    if ((event.type !== "message" && event.type !== "app_mention") || !event.text || event.subtype || event.bot_id) {
+    var e = evt.event;
+    if ((e.type !== "message" && e.type !== "app_mention") || !e.text || e.subtype || e.bot_id) {
       return { name: "slack/message.unsupported", data: evt };
     }
-
-    var channelId = event.channel;
-    var userId = event.user;
-    var messageText = event.text;
-    var messageTs = event.ts;
-    var threadTs = event.thread_ts;
-
-    // Create session key - use thread if available, otherwise channel
-    var sessionKey = "slack-" + channelId + (threadTs ? "-" + threadTs : "");
-
+    var ch = e.channel, ts = e.ts, tts = e.thread_ts;
     return {
-      id: \`slack.\${event.type}.\${evt.event_id}\`,
+      id: "slack." + e.type + "." + evt.event_id,
       name: "agent.message.received",
       data: {
-        message: messageText,
-        sessionKey: sessionKey,
+        message: e.text,
+        sessionKey: "slack-" + ch + (tts ? "-" + tts : ""),
         channel: "slack",
-        sender: {
-          id: userId,
-          name: "User", // Will be enriched by handler if needed
-          username: undefined
-        },
-        destination: {
-          chatId: channelId,
-          messageId: messageTs,
-          threadId: threadTs
-        },
+        sender: { id: e.user, name: "User" },
+        destination: { chatId: ch + "-" + (tts || ts), messageId: ts, threadId: tts },
         channelMeta: {
-          teamId: evt.team_id,
-          eventId: evt.event_id,
-          eventTime: evt.event_time,
-          eventType: event.type,
-          channelType: event.channel_type,
-          threadTs: threadTs
+          channelId: ch, teamId: evt.team_id, eventId: evt.event_id,
+          eventTime: evt.event_time, eventType: e.type,
+          channelType: e.channel_type, threadTs: tts
         }
       }
     };
-  } catch (e) {
-    return { name: "slack/transform.failed", data: { error: String(e), raw: evt } };
+  } catch (err) {
+    return { name: "slack/transform.failed", data: { error: String(err), raw: evt } };
   }
 }`;
 
@@ -133,6 +109,9 @@ export function transform(
 
   const sessionKey = `slack-${event.channel}${event.thread_ts ? `-${event.thread_ts}` : ""}`;
 
+  // Compound chatId: thread-scoped if in a thread, message-scoped otherwise.
+  const chatId = `${event.channel}-${event.thread_ts || event.ts}`;
+
   const data: AgentMessageData = {
     message: event.text,
     sessionKey,
@@ -142,11 +121,12 @@ export function transform(
       name: "User", // Will be enriched by handler if needed
     },
     destination: {
-      chatId: event.channel,
+      chatId,
       messageId: event.ts,
       threadId: event.thread_ts,
     },
     channelMeta: {
+      channelId: event.channel,
       teamId: evt.team_id,
       eventId: evt.event_id,
       eventTime: evt.event_time,
