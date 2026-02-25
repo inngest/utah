@@ -18,8 +18,14 @@ export const handleMessage = inngest.createFunction(
   {
     id: "agent-handle-message",
     retries: 2,
-    concurrency: [{ scope: "fn", key: "event.data.destination.chatId", limit: 1 }],
-    cancelOn: [{ event: "agent.message.received", match: "data.destination.chatId" }],
+    concurrency: [{ scope: "fn", key: "event.data.sessionKey", limit: 1 }],
+    cancelOn: [
+      {
+        event: "agent.message.received",
+        match: "data.sessionKey",
+        if: "async.data.destination.messageId != event.data.destination.messageId",
+      },
+    ],
   },
   { event: "agent.message.received" },
   async ({ event, step }) => {

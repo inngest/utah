@@ -21,7 +21,7 @@ export const RESPONSE_SOURCE = `function respond(body, headers) {
 export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
   try {
     if (headers && headers["x-slack-retry-num"]) {
-      return { name: "slack/event.retry", data: {} };
+      return { name: "slack/event.retry", data: { evt, headers } };
     }
     if (evt.type === "url_verification") {
       return { name: "slack/url.verification", data: { challenge: evt.challenge } };
@@ -31,22 +31,22 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
     }
     var e = evt.event;
     if ((e.type !== "message" && e.type !== "app_mention") || !e.text || e.subtype || e.bot_id) {
-      return { name: "slack/message.unsupported", data: evt };
+      return { id: "slack." + e.event_ts, name: "slack/message.unsupported", data: evt };
     }
-    var ch = e.channel, ts = e.ts, tts = e.thread_ts;
+    var ch = e.channel, ts = e.ts, tts = e.thread_ts, thread = tts || ts;
     return {
-      id: "slack." + e.type + "." + evt.event_id,
+      id: "slack." + ch + "." + ts,
       name: "agent.message.received",
       data: {
         message: e.text,
-        sessionKey: "slack-" + ch + (tts ? "-" + tts : ""),
+        sessionKey: "slack-" + ch + "-" + thread,
         channel: "slack",
         sender: { id: e.user, name: "User" },
-        destination: { chatId: ch + "-" + (tts || ts), messageId: ts, threadId: tts },
+        destination: { chatId: ch + "-" + ts, threadId: thread, messageId: ts },
         channelMeta: {
           channelId: ch, teamId: evt.team_id, eventId: evt.event_id,
           eventTime: evt.event_time, eventType: e.type,
-          channelType: e.channel_type, threadTs: tts
+          channelType: e.channel_type, threadTs: thread
         }
       }
     };
@@ -107,10 +107,9 @@ export function transform(
     return { name: "slack/message.unsupported", data: evt };
   }
 
-  const sessionKey = `slack-${event.channel}${event.thread_ts ? `-${event.thread_ts}` : ""}`;
-
-  // Compound chatId: thread-scoped if in a thread, message-scoped otherwise.
-  const chatId = `${event.channel}-${event.thread_ts || event.ts}`;
+  // Always thread-scope: use thread_ts if in a thread, or ts to start a new thread
+  const thread = event.thread_ts || event.ts;
+  const sessionKey = `slack-${event.channel}-${thread}`;
 
   const data: AgentMessageData = {
     message: event.text,
@@ -121,9 +120,9 @@ export function transform(
       name: "User", // Will be enriched by handler if needed
     },
     destination: {
-      chatId,
+      chatId: `${event.channel}-${event.ts}`,
       messageId: event.ts,
-      threadId: event.thread_ts,
+      threadId: thread,
     },
     channelMeta: {
       channelId: event.channel,
@@ -131,12 +130,12 @@ export function transform(
       eventId: evt.event_id,
       eventTime: evt.event_time,
       channelType: event.channel_type,
-      threadTs: event.thread_ts,
+      threadTs: thread,
     },
   };
 
   return {
-    id: `slack.${event.type}.${evt.event_id}`,
+    id: `slack.${event.channel}.${event.ts}`,
     name: "agent.message.received",
     data,
   };
