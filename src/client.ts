@@ -1,4 +1,5 @@
 import { EventSchemas, Inngest } from "inngest";
+import { extendedTracesMiddleware } from "inngest/experimental";
 import type { AgentMessageData, AgentReplyData } from "./channels/types.ts";
 
 type Events = {
@@ -19,5 +20,6 @@ type Events = {
 export const inngest = new Inngest({
   id: "ai-agent",
   checkpointing: true,
+  middleware: [extendedTracesMiddleware()],
   schemas: new EventSchemas().fromRecord<Events>(),
 });
