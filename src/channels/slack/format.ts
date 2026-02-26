@@ -10,29 +10,52 @@
  * Slack uses a subset of markdown with some quirks.
  */
 export function markdownToSlackMrkdwn(text: string): string {
-  return text
+  // Protect code blocks and inline code from formatting changes
+  const codeBlocks: string[] = [];
+  let result = text.replace(/```[\s\S]*?```/g, (match) => {
+    codeBlocks.push(match);
+    return `\x00CODE${codeBlocks.length - 1}\x00`;
+  });
+  const inlineCode: string[] = [];
+  result = result.replace(/`[^`]+`/g, (match) => {
+    inlineCode.push(match);
+    return `\x00INLINE${inlineCode.length - 1}\x00`;
+  });
+
+  // Links FIRST: [text](url) -> <url|text> (before italic/bold to protect URLs)
+  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "<$2|$1>");
+
+  // Protect bare URLs from formatting changes (underscores in URLs)
+  const urls: string[] = [];
+  result = result.replace(/https?:\/\/[^\s>)]+/g, (match) => {
+    urls.push(match);
+    return `\x00URL${urls.length - 1}\x00`;
+  });
+
+  result = result
     // Headings: ## Heading -> *Heading*
     .replace(/^#{1,6}\s+(.+)$/gm, "*$1*")
 
     // Bold: **text** or __text__ -> *text*
     .replace(/\*\*(.*?)\*\*/g, "*$1*")
     .replace(/__(.*?)__/g, "*$1*")
-    
+
     // Italic: *text* or _text_ -> _text_
     .replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, "_$1_")
-    
-    // Code: `text` -> `text` (already correct)
-    // Code blocks: ```text``` -> ```text``` (already correct)
-    
-    // Links: [text](url) -> <url|text>
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "<$2|$1>")
-    
+
     // Strikethrough: ~~text~~ -> ~text~
     .replace(/~~(.*?)~~/g, "~$1~")
-    
+
     // Lists: Slack doesn't have great list support, but we can use bullet points
     .replace(/^[\s]*[-*+]\s+/gm, "• ")
     .replace(/^[\s]*\d+\.\s+/gm, "1. ");
+
+  // Restore protected tokens
+  result = result.replace(/\x00URL(\d+)\x00/g, (_, i) => urls[parseInt(i)]);
+  result = result.replace(/\x00INLINE(\d+)\x00/g, (_, i) => inlineCode[parseInt(i)]);
+  result = result.replace(/\x00CODE(\d+)\x00/g, (_, i) => codeBlocks[parseInt(i)]);
+
+  return result;
 }
 
 /**

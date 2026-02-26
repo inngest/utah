@@ -15,12 +15,14 @@ export const RESPONSE_SOURCE = `function respond(body, headers) {
   if (parsed && parsed.type === "url_verification" && parsed.challenge) {
     return { status: 200, headers: { "Content-Type": "text/plain" }, body: parsed.challenge };
   }
+  // Otherwise return a plain response
+  return { status: 200, headers: { "Content-Type": "text/plain" }, body: 'OK' }
 }`;
 
 // Plain JS transform — synced to Inngest webhook by setup script
 export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
   try {
-    if (headers && headers["x-slack-retry-num"]) {
+    if (headers && headers["X-Slack-Retry-Num"]) {
       return { name: "slack/event.retry", data: { evt, headers } };
     }
     if (evt.type === "url_verification") {
@@ -47,7 +49,8 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
           channelId: ch, teamId: evt.team_id, eventId: evt.event_id,
           eventTime: evt.event_time, eventType: e.type,
           channelType: e.channel_type, threadTs: thread
-        }
+        },
+        headers,
       }
     };
   } catch (err) {
