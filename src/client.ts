@@ -8,11 +8,11 @@ import type { AgentMessageData, AgentReplyData } from "./channels/types.ts";
 
 // Decentralized event types (replaces EventSchemas in v4)
 export const agentMessageReceived = eventType("agent.message.received", {
-  schema: staticSchema<AgentMessageData & Record<string, unknown>>(),
+  schema: staticSchema<AgentMessageData>(),
 });
 
 export const agentReplyReady = eventType("agent.reply.ready", {
-  schema: staticSchema<AgentReplyData & Record<string, unknown>>(),
+  schema: staticSchema<AgentReplyData>(),
 });
 
 export const telegramUnsupported = eventType("telegram/message.unsupported", {
