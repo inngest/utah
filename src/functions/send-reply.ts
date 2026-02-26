@@ -7,12 +7,11 @@
  * One function handles all channels — no per-channel Inngest functions needed.
  */
 
-import { inngest } from "../client.ts";
+import { inngest, agentReplyReady } from "../client.ts";
 import { getChannel } from "../channels/index.ts";
 
 export const sendReply = inngest.createFunction(
-  { id: "send-reply", retries: 3 },
-  { event: "agent.reply.ready" },
+  { id: "send-reply", retries: 3, triggers: [agentReplyReady] },
   async ({ event, step }) => {
     const { response, channel, destination, channelMeta } = event.data;
 

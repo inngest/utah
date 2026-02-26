@@ -9,8 +9,7 @@ import { inngest } from "../client.ts";
 import { config } from "../config.ts";
 
 export const failureHandler = inngest.createFunction(
-  { id: "global-failure-handler", retries: 1 },
-  { event: "inngest/function.failed" },
+  { id: "global-failure-handler", retries: 1, triggers: [{ event: "inngest/function.failed" }] },
   async ({ event, step }) => {
     const data = event.data as {
       error: { message: string };

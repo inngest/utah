@@ -10,12 +10,11 @@
  * - Discord: typing indicator
  */
 
-import { inngest } from "../client.ts";
+import { inngest, agentMessageReceived } from "../client.ts";
 import { getChannel } from "../channels/index.ts";
 
 export const acknowledgeMessage = inngest.createFunction(
-  { id: "acknowledge-message", retries: 0 },
-  { event: "agent.message.received" },
+  { id: "acknowledge-message", retries: 0, triggers: [agentMessageReceived] },
   async ({ event, step }) => {
     const { channel, destination, channelMeta } = event.data;
 
