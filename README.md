@@ -1,8 +1,10 @@
 # Inngest Agent Example — Utah
 
-A durable AI agent built with [Inngest](https://inngest.com). No framework. No LangChain. Just a think/act/observe loop with Inngest steps for durability, retries, and observability.
+_**U**niversally **T**riggered **A**gent **H**arness_
 
-**~1,000 lines of TypeScript** that gives you:
+A durable AI agent built with [Inngest](https://inngest.com) and [pi-ai](https://github.com/badlogic/pi-mono). No framework. Just a think/act/observe loop — Inngest provides durability, retries, and observability, while pi-ai provides a unified LLM interface across providers.
+
+Simple TypeScript that gives you:
 
 - 🔄 **Durable agent loop** — every LLM call and tool execution is an Inngest step
 - 🔁 **Automatic retries** — LLM API timeouts are handled by Inngest, not your code
@@ -120,7 +122,7 @@ workspace/                       # Agent workspace (persisted across runs)
 
 The core is a while loop where each iteration is an Inngest step:
 
-1. **Think** — `step.run("think")` calls the LLM via pi-ai's `complete()`
+1. **Think** — `step.run("think")` calls the LLM via [pi-ai](https://github.com/badlogic/pi-mono)'s `complete()`
 2. **Act** — if the LLM wants tools, each tool runs as `step.run("tool-read")`
 3. **Observe** — tool results are fed back into the conversation
 4. **Repeat** — until the LLM responds with text (no tools) or max iterations
@@ -205,12 +207,16 @@ The agent loop, reply dispatch, and acknowledgment functions are all channel-agn
 ## Key Inngest Features Used
 
 - **[`connect()`](/docs/reference/serve#connect)** — WebSocket connection for local development
-- **[Singleton concurrency](/docs/guides/concurrency)** — one run per chat at a time
+- **[Concurrency controls](/docs/guides/concurrency)** — one run per chat at a time
 - **[`cancelOn`](/docs/guides/cancel)** — cancel active run when user sends a new message
 - **[Step retries](/docs/guides/error-handling)** — automatic retry on LLM API failures
 - **[Event-driven functions](/docs/features/inngest-functions)** — compose behavior from small focused functions
 - **[Webhook transforms](/docs/platform/webhooks)** — convert external payloads to typed events
 - **[Checkpointing](/docs/setup/checkpointing)** — near-zero inter-step latency
+
+## Acknowledgments
+
+This project uses [pi-ai](https://github.com/badlogic/pi-mono) (`@mariozechner/pi-ai`) by [Mario Zechner](https://github.com/badlogic) for its unified LLM interface and `@mariozechner/pi-coding-agent` for it's. standard tools. pi-ai provides a single `complete()` function that works across Anthropic, OpenAI, Google, and other providers — making it easy to swap models without changing any agent code. It's a great library.
 
 ## License
 
