@@ -2,6 +2,10 @@
  * Worker — registers Inngest functions and connects via WebSocket.
  */
 
+// Import extended traces FIRST - before anything else
+import { extendedTracesMiddleware } from "inngest/experimental";
+const extendedTraces = extendedTracesMiddleware();
+
 import { connect } from "inngest/connect";
 import { inngest } from "./client.ts";
 import { handleMessage } from "./functions/message.ts";
