@@ -18,7 +18,7 @@
 
 import { config } from "./config.ts";
 import { callLLM, validateToolArguments, type Message } from "./lib/llm.ts";
-import { TOOLS, executeTool } from "./lib/tools.ts";
+import { TOOLS, SUB_AGENT_TOOLS, executeTool, type ToolResult } from "./lib/tools.ts";
 import { buildSystemPrompt, buildConversationHistory } from "./lib/context.ts";
 import { ensureWorkspace } from "./lib/memory.ts";
 import { shouldCompact, runCompaction } from "./lib/compaction.ts";
@@ -103,12 +103,21 @@ type ToolStepInput = {
   args: Record<string, unknown>;
 };
 
+export interface AgentLoopOptions {
+  /** Tools available in this loop. Defaults to TOOLS (includes delegate_task). */
+  tools?: typeof TOOLS;
+  /** Whether this is a sub-agent (disables delegate_task handling). */
+  isSubAgent?: boolean;
+}
+
 /**
  * Create the agent loop for a given message and session.
  * Returns a function that takes an Inngest step API and runs the loop.
  */
-export function createAgentLoop(userMessage: string, sessionKey: string) {
+export function createAgentLoop(userMessage: string, sessionKey: string, options?: AgentLoopOptions) {
   return async (step: StepAPI): Promise<AgentRunResult> => {
+    const tools = options?.tools ?? TOOLS;
+
     // Ensure workspace directories exist (sessions, memory)
     await step.run("ensure-workspace", async () => {
       await ensureWorkspace();
@@ -211,8 +220,8 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
       // Think: call the LLM via pi-ai
       const llmResponse = await step.run(
         "think",
-        async ({ systemPrompt }: { systemPrompt: string }) => {
-          return await callLLM(systemPrompt, messagesForLLM, TOOLS);
+        async ({ systemPrompt: sp }: { systemPrompt: string }) => {
+          return await callLLM(sp, messagesForLLM, tools);
         },
         { systemPrompt },
       );
@@ -279,23 +288,42 @@ export function createAgentLoop(userMessage: string, sessionKey: string) {
         for (const tc of toolCalls) {
           totalToolCalls++;
 
-          const toolResult = await step.run(
-            `tool-${tc.name}`,
-            async ({ name, id, args }: ToolStepInput) => {
-              // Validate arguments using pi-ai's TypeBox validation
-              const tool = TOOLS.find((t) => t.name === name);
-              if (tool) {
-                validateToolArguments(tool, {
-                  type: "toolCall",
-                  name,
-                  id,
-                  arguments: args,
-                });
-              }
-              return await executeTool(id, name, args);
-            },
-            { name: tc.name, id: tc.id, args: tc.arguments },
-          );
+          let toolResult: ToolResult;
+
+          if (tc.name === "delegate_task" && !options?.isSubAgent) {
+            // delegate_task uses step.invoke() to spawn a sub-agent function
+            const subSessionKey = `sub-${sessionKey}-${Date.now()}`;
+            const { subAgent } = await import("./functions/sub-agent.ts");
+            const subResult = await step.invoke("sub-agent", {
+              function: subAgent,
+              data: {
+                task: tc.arguments.task as string,
+                subSessionKey,
+                parentSessionKey: sessionKey,
+              },
+            });
+            toolResult = {
+              result: subResult?.response || "(Sub-agent returned no response)",
+            };
+          } else {
+            toolResult = await step.run(
+              `tool-${tc.name}`,
+              async ({ name, id, args }: ToolStepInput) => {
+                // Validate arguments using pi-ai's TypeBox validation
+                const tool = tools.find((t) => t.name === name);
+                if (tool) {
+                  validateToolArguments(tool, {
+                    type: "toolCall",
+                    name,
+                    id,
+                    arguments: args,
+                  });
+                }
+                return await executeTool(id, name, args);
+              },
+              { name: tc.name, id: tc.id, args: tc.arguments },
+            );
+          }
 
           // Observe: feed result back in pi-ai's ToolResultMessage format
           messages.push({

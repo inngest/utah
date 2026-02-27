@@ -23,6 +23,14 @@ export const telegramTransformFailed = eventType("telegram/transform.failed", {
   schema: staticSchema<{ error: string; raw: unknown }>(),
 });
 
+export const agentSubagentSpawn = eventType("agent.subagent.spawn", {
+  schema: staticSchema<{
+    task: string;
+    subSessionKey: string;
+    parentSessionKey: string;
+  }>(),
+});
+
 export const inngest = new Inngest({
   id: "ai-agent",
   checkpointing: true,
