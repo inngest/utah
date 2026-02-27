@@ -16,8 +16,11 @@ interface WebhookData {
   name: string;
   url: string;
   transform: string;
-  created_at: string;
-  updated_at: string;
+  response?: string;
+  event_filter?: { events: string[]; filter: string };
+  environment: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**
@@ -26,7 +29,7 @@ interface WebhookData {
 export async function ensureInngestWebhook(): Promise<WebhookData> {
   console.log("🔍 Checking Inngest webhooks...");
 
-  const { data: webhooks } = await inngestFetch("/webhooks");
+  const { data: webhooks } = await inngestFetch("/v2/env/webhooks");
 
   let webhook: WebhookData | undefined = webhooks.find(
     (w: WebhookData) => w.name === WEBHOOK_NAME,
@@ -38,19 +41,19 @@ export async function ensureInngestWebhook(): Promise<WebhookData> {
     // Compare transforms (normalize whitespace)
     const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
     if (normalize(webhook.transform || "") !== normalize(TRANSFORM_SOURCE)) {
-      console.log("   ⚡ Transform is out of date — updating...");
-      const { data: updated } = await inngestFetch(`/webhooks/${webhook.id}`, {
-        method: "PUT",
+      console.log("   ⚠️  Transform is out of date — recreating webhook...");
+      const { data: created } = await inngestFetch("/v2/env/webhooks", {
+        method: "POST",
         body: JSON.stringify({ name: WEBHOOK_NAME, transform: TRANSFORM_SOURCE }),
       });
-      webhook = updated;
-      console.log("   ✅ Transform updated");
+      webhook = created;
+      console.log(`   ✅ Recreated webhook: ${webhook!.id}`);
     } else {
       console.log("   ✅ Transform is up to date");
     }
   } else {
     console.log("   Creating new Inngest webhook...");
-    const { data: created } = await inngestFetch("/webhooks", {
+    const { data: created } = await inngestFetch("/v2/env/webhooks", {
       method: "POST",
       body: JSON.stringify({ name: WEBHOOK_NAME, transform: TRANSFORM_SOURCE }),
     });

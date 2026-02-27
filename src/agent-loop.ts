@@ -23,6 +23,8 @@ import { buildSystemPrompt, buildConversationHistory } from "./lib/context.ts";
 import { ensureWorkspace } from "./lib/memory.ts";
 import { shouldCompact, runCompaction } from "./lib/compaction.ts";
 import type { SessionMessage } from "./lib/session.ts";
+import type { GetStepTools } from "inngest";
+import type { inngest } from "./client.ts";
 
 // --- Types ---
 
@@ -94,15 +96,11 @@ function pruneOldToolResults(messages: Message[]) {
 
 // --- The Loop ---
 
-/**
- * Minimal step interface for the agent loop.
- * Compatible with Inngest's step API — we only use run() here.
- * sendEvent is called directly by the function handler, not the loop.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type StepAPI = {
-  run: (id: string, fn: () => Promise<any>) => Promise<any>;
-  invoke: (id: string, opts: { function: any; data: any }) => Promise<any>;
+type StepAPI = GetStepTools<typeof inngest>;
+type ToolStepInput = {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
 };
 
 export interface AgentLoopOptions {
@@ -159,12 +157,29 @@ export function createAgentLoop(userMessage: string, sessionKey: string, options
             api: "" as any,
             provider: "",
             model: "",
-            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
             stopReason: "stop" as const,
             timestamp: Date.now(),
           };
         }
-        return { role: "user" as const, content: h.content, timestamp: Date.now() };
+        return {
+          role: "user" as const,
+          content: h.content,
+          timestamp: Date.now(),
+        };
       }),
       { role: "user" as const, content: userMessage, timestamp: Date.now() },
     ];
@@ -192,18 +207,35 @@ export function createAgentLoop(userMessage: string, sessionKey: string, options
             : "";
 
       const messagesForLLM = budgetWarning
-        ? [...messages, { role: "user" as const, content: budgetWarning, timestamp: Date.now() }]
+        ? [
+            ...messages,
+            {
+              role: "user" as const,
+              content: budgetWarning,
+              timestamp: Date.now(),
+            },
+          ]
         : messages;
 
       // Think: call the LLM via pi-ai
-      const llmResponse = await step.run("think", async () => {
-        return await callLLM(systemPrompt, messagesForLLM, tools);
-      });
+      const llmResponse = await step.run(
+        "think",
+        async ({ systemPrompt: sp }: { systemPrompt: string }) => {
+          return await callLLM(sp, messagesForLLM, tools);
+        },
+        { systemPrompt },
+      );
 
       // If the LLM returned an error, check if it's a context overflow
       if (llmResponse.stopReason === "error") {
-        const errMsg = llmResponse.message.errorMessage || llmResponse.text || "Unknown LLM error";
-        const isOverflow = /context.?overflow|prompt.?too.?large|too many tokens|maximum context|token limit/i.test(errMsg);
+        const errMsg =
+          llmResponse.message.errorMessage ||
+          llmResponse.text ||
+          "Unknown LLM error";
+        const isOverflow =
+          /context.?overflow|prompt.?too.?large|too many tokens|maximum context|token limit/i.test(
+            errMsg,
+          );
 
         if (isOverflow && !hasCompactedThisRun) {
           // Context overflow — force-compact the conversation and retry this iteration
@@ -219,9 +251,10 @@ export function createAgentLoop(userMessage: string, sessionKey: string, options
             const summaryText = toSummarize
               .map((m) => {
                 const role = (m as any).role?.toUpperCase() || "UNKNOWN";
-                const text = typeof (m as any).content === "string"
-                  ? (m as any).content
-                  : "[complex content]";
+                const text =
+                  typeof (m as any).content === "string"
+                    ? (m as any).content
+                    : "[complex content]";
                 return `${role}: ${typeof text === "string" ? text.slice(0, 200) : ""}`;
               })
               .join("\n");
@@ -273,14 +306,23 @@ export function createAgentLoop(userMessage: string, sessionKey: string, options
               result: subResult?.response || "(Sub-agent returned no response)",
             };
           } else {
-            toolResult = await step.run(`tool-${tc.name}`, async () => {
-              // Validate arguments using pi-ai's TypeBox validation
-              const tool = tools.find((t) => t.name === tc.name);
-              if (tool) {
-                validateToolArguments(tool, { type: "toolCall", name: tc.name, id: tc.id, arguments: tc.arguments });
-              }
-              return await executeTool(tc.id, tc.name, tc.arguments);
-            });
+            toolResult = await step.run(
+              `tool-${tc.name}`,
+              async ({ name, id, args }: ToolStepInput) => {
+                // Validate arguments using pi-ai's TypeBox validation
+                const tool = tools.find((t) => t.name === name);
+                if (tool) {
+                  validateToolArguments(tool, {
+                    type: "toolCall",
+                    name,
+                    id,
+                    arguments: args,
+                  });
+                }
+                return await executeTool(id, name, args);
+              },
+              { name: tc.name, id: tc.id, args: tc.arguments },
+            );
           }
 
           // Observe: feed result back in pi-ai's ToolResultMessage format
@@ -302,7 +344,7 @@ export function createAgentLoop(userMessage: string, sessionKey: string, options
       // Log iteration
       if (llmResponse.usage) {
         console.log(
-          `[loop] iter=${iterations} tools=${toolCalls.length} tokens=${llmResponse.usage.input || "?"}in/${llmResponse.usage.output || "?"}out cost=$${llmResponse.usage.cost?.total?.toFixed(4) || "?"}`
+          `[loop] iter=${iterations} tools=${toolCalls.length} tokens=${llmResponse.usage.input || "?"}in/${llmResponse.usage.output || "?"}out cost=$${llmResponse.usage.cost?.total?.toFixed(4) || "?"}`,
         );
       }
     }

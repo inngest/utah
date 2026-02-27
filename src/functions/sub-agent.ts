@@ -7,7 +7,7 @@
  * The sub-agent does NOT have the delegate_task tool to prevent recursive spawning.
  */
 
-import { inngest } from "../client.ts";
+import { inngest, agentSubagentSpawn } from "../client.ts";
 import { createAgentLoop } from "../agent-loop.ts";
 import { SUB_AGENT_TOOLS } from "../lib/tools.ts";
 
@@ -15,8 +15,8 @@ export const subAgent = inngest.createFunction(
   {
     id: "agent-sub-agent",
     retries: 1,
+    triggers: [agentSubagentSpawn],
   },
-  { event: "agent.subagent.spawn" },
   async ({ event, step }) => {
     const { task, subSessionKey } = event.data;
 

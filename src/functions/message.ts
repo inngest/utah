@@ -10,7 +10,7 @@
  * - Step-based execution (each LLM call and tool is a step)
  */
 
-import { inngest } from "../client.ts";
+import { inngest, agentMessageReceived } from "../client.ts";
 import { createAgentLoop } from "../agent-loop.ts";
 import { appendToSession } from "../lib/session.ts";
 
@@ -18,10 +18,16 @@ export const handleMessage = inngest.createFunction(
   {
     id: "agent-handle-message",
     retries: 2,
-    concurrency: [{ scope: "fn", key: "event.data.destination.chatId", limit: 1 }],
-    cancelOn: [{ event: "agent.message.received", match: "data.destination.chatId" }],
+    triggers: [agentMessageReceived],
+    concurrency: [{ scope: "fn", key: "event.data.sessionKey", limit: 1 }],
+    cancelOn: [
+      {
+        event: "agent.message.received",
+        match: "data.sessionKey",
+        if: "async.data.destination.messageId != event.data.destination.messageId",
+      },
+    ],
   },
-  { event: "agent.message.received" },
   async ({ event, step }) => {
     const {
       message,

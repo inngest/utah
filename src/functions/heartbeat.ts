@@ -60,8 +60,8 @@ export const heartbeat = inngest.createFunction(
   {
     id: "agent-heartbeat",
     name: "Memory Maintenance Heartbeat",
+    triggers: [{ cron: HEARTBEAT_CRON }],
   },
-  { cron: HEARTBEAT_CRON },
   async ({ step }) => {
     // Step 1: Check if distillation is needed (no LLM — just file reads)
     const check = await step.run("check-if-needed", async () => {

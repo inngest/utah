@@ -23,6 +23,11 @@ export function getConfiguredModel() {
       config.llm.provider as KnownProvider as any,
       config.llm.model as any,
     );
+    if (!_model) {
+      throw new Error(
+        `Unknown model "${config.llm.model}" for provider "${config.llm.provider}". Check AGENT_MODEL and LLM_PROVIDER env vars.`,
+      );
+    }
   }
   return _model;
 }

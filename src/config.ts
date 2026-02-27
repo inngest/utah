@@ -39,4 +39,9 @@ export const config = {
       .split(",")
       .filter(Boolean),
   },
+
+  slack: {
+    botToken: process.env.SLACK_BOT_TOKEN || "",
+    signingSecret: process.env.SLACK_SIGNING_SECRET || "",
+  },
 };

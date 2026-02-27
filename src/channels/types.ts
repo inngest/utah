@@ -57,7 +57,7 @@ export interface Destination {
  * The normalized event data shape for agent.message.received.
  * Transforms produce this, the agent loop consumes it.
  */
-export interface AgentMessageData {
+export type AgentMessageData = {
   /** The text content */
   message: string;
   /** Unique session identifier (e.g. "telegram-12345") */
@@ -70,13 +70,13 @@ export interface AgentMessageData {
   destination: Destination;
   /** Channel-specific metadata — opaque to the agent, passed to handlers */
   channelMeta: Record<string, unknown>;
-}
+};
 
 /**
  * The normalized event data shape for agent.reply.ready.
  * Agent loop produces this, channel handlers consume it.
  */
-export interface AgentReplyData {
+export type AgentReplyData = {
   /** The agent's response text (markdown) */
   response: string;
   /** Channel name — used for dispatch */
@@ -85,7 +85,7 @@ export interface AgentReplyData {
   destination: Destination;
   /** Channel-specific metadata — passed through from the incoming event */
   channelMeta: Record<string, unknown>;
-}
+};
 
 // --- Handler Params ---
 
