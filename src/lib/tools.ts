@@ -27,6 +27,7 @@ import {
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { config } from "../config.ts";
 import { appendDailyLog } from "./memory.ts";
+import { tracer } from "./traces.ts";
 
 // --- Pi-coding-agent tools (configured for workspace) ---
 
@@ -95,6 +96,13 @@ export async function executeTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
+  const span = await tracer.startSpan("executeTool", {
+    attributes: {
+      toolCallId,
+      name,
+      args: JSON.stringify(args),
+    },
+  });
   try {
     // Check if it's a pi-coding-agent tool
     const piTool = piToolMap.get(name);
@@ -106,7 +114,7 @@ export async function executeTool(
         .filter((c) => c.type === "text")
         .map((c) => (c as { type: "text"; text: string }).text)
         .join("\n");
-
+      await span.end();
       return { result: text || "(no output)" };
     }
 
@@ -114,6 +122,7 @@ export async function executeTool(
     switch (name) {
       case "remember": {
         await appendDailyLog(args.note as string);
+        await span.end();
         return { result: "Saved to today's log." };
       }
       case "web_fetch": {
@@ -122,12 +131,15 @@ export async function executeTool(
           headers: { "User-Agent": "Utah-Agent/1.0" },
         });
         const text = await res.text();
+        await span.end();
         return { result: text.slice(0, 50_000) };
       }
       default:
+        await span.end();
         return { result: `Unknown tool: ${name}`, error: true };
     }
   } catch (err) {
+    await span.end();
     return {
       result: `Error: ${err instanceof Error ? err.message : String(err)}`,
       error: true,
