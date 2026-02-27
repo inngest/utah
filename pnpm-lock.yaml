@@ -17,6 +17,9 @@ importers:
       '@mariozechner/pi-coding-agent':
         specifier: ^0.54.0
         version: 0.54.2(ws@8.19.0)(zod@4.3.6)
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.0
       '@sinclair/typebox':
         specifier: ^0.34.0
         version: 0.34.48
