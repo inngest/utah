@@ -18,7 +18,7 @@
 
 import { config } from "./config.ts";
 import { callLLM, validateToolArguments, type Message } from "./lib/llm.ts";
-import { TOOLS, SUB_AGENT_TOOLS, executeTool, type ToolResult } from "./lib/tools.ts";
+import { TOOLS, executeTool, type ToolResult } from "./lib/tools.ts";
 import { buildSystemPrompt, buildConversationHistory } from "./lib/context.ts";
 import { ensureWorkspace } from "./lib/memory.ts";
 import { shouldCompact, runCompaction } from "./lib/compaction.ts";
@@ -114,7 +114,11 @@ export interface AgentLoopOptions {
  * Create the agent loop for a given message and session.
  * Returns a function that takes an Inngest step API and runs the loop.
  */
-export function createAgentLoop(userMessage: string, sessionKey: string, options?: AgentLoopOptions) {
+export function createAgentLoop(
+  userMessage: string,
+  sessionKey: string,
+  options?: AgentLoopOptions,
+) {
   return async (step: StepAPI): Promise<AgentRunResult> => {
     const tools = options?.tools ?? TOOLS;
 

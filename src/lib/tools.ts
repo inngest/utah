@@ -33,13 +33,13 @@ import { appendDailyLog } from "./memory.ts";
 // Cast to AgentTool<any>[] — the specific TSchema generics cause contravariance issues
 // but the tools are used dynamically (looked up by name) so this is safe.
 const piTools: AgentTool<any>[] = [
-  createReadTool(config.workspace.root) as AgentTool<any>,
-  createEditTool(config.workspace.root) as AgentTool<any>,
-  createWriteTool(config.workspace.root) as AgentTool<any>,
-  createBashTool(config.workspace.root) as AgentTool<any>,
-  createGrepTool(config.workspace.root) as AgentTool<any>,
-  createFindTool(config.workspace.root) as AgentTool<any>,
-  createLsTool(config.workspace.root) as AgentTool<any>,
+  createReadTool(config.workspace.root),
+  createEditTool(config.workspace.root),
+  createWriteTool(config.workspace.root),
+  createBashTool(config.workspace.root),
+  createGrepTool(config.workspace.root),
+  createFindTool(config.workspace.root),
+  createLsTool(config.workspace.root),
 ];
 
 // --- Custom Utah tools ---
@@ -83,7 +83,12 @@ You'll receive a summary of what it accomplished.`,
 /**
  * All tools available to the main agent (includes delegate_task).
  */
-export const TOOLS: Tool[] = [...piTools, rememberTool, webFetchTool, delegateTaskTool];
+export const TOOLS: Tool[] = [
+  ...piTools,
+  rememberTool,
+  webFetchTool,
+  delegateTaskTool,
+];
 
 /**
  * Tools available to sub-agents (no delegate_task to prevent recursive spawning).
