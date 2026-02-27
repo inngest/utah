@@ -24,7 +24,7 @@ The worker connects to Inngest Cloud via WebSocket. No public endpoint. No ngrok
 ## Prerequisites
 
 - **Node.js 23+** (uses native TypeScript strip-types)
-- **Anthropic API key** ([console.anthropic.com](https://console.anthropic.com))
+- LLM API key (e.g. **Anthropic API key** ([console.anthropic.com](https://console.anthropic.com)))
 - **Inngest account** ([app.inngest.com](https://app.inngest.com))
 - **At least one channel** configured (see [Channels](#channels) below)
 
@@ -206,13 +206,12 @@ The agent loop, reply dispatch, and acknowledgment functions are all channel-agn
 
 ## Key Inngest Features Used
 
-- **[`connect()`](/docs/reference/serve#connect)** — WebSocket connection for local development
-- **[Concurrency controls](/docs/guides/concurrency)** — one run per chat at a time
-- **[`cancelOn`](/docs/guides/cancel)** — cancel active run when user sends a new message
-- **[Step retries](/docs/guides/error-handling)** — automatic retry on LLM API failures
-- **[Event-driven functions](/docs/features/inngest-functions)** — compose behavior from small focused functions
-- **[Webhook transforms](/docs/platform/webhooks)** — convert external payloads to typed events
-- **[Checkpointing](/docs/setup/checkpointing)** — near-zero inter-step latency
+- **[`connect()`](https://www.inngest.com/docs/setup/connect)** — WebSocket-based worker
+- **[Singleton execution](https://www.inngest.com/docs/guides/singleton)** — one run per chat at a time
+- **[Step retries](https://www.inngest.com/docs/guides/error-handling)** — automatic retry on LLM API failures
+- **[Event-driven functions](https://www.inngest.com/docs/features/inngest-functions)** — compose behavior from small focused functions
+- **[Webhook transforms](https://www.inngest.com/docs/platform/webhooks)** — convert external payloads to typed events
+- **[Checkpointing](https://www.inngest.com/docs/setup/checkpointing)** — near-zero inter-step latency
 
 ## Acknowledgments
 

@@ -2,7 +2,7 @@
 
 ## Context
 
-The `agent-handle-message` function uses `cancelOn` to cancel the current run when a new message arrives in the same session. Currently, cancellation happens silently — the user gets no acknowledgment that their new message was received and the agent is starting over. Adding a cancellation handler sends a short reply like "Got it, let me reconsider..." so the user knows their follow-up was picked up.
+The `agent-handle-message` function uses `singleton` (with `mode: "cancel"`) to cancel the current run when a new message arrives in the same session. Currently, cancellation happens silently — the user gets no acknowledgment that their new message was received and the agent is starting over. Adding a cancellation handler sends a short reply like "Got it, let me reconsider..." so the user knows their follow-up was picked up.
 
 ## Plan
 

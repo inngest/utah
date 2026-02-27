@@ -5,8 +5,7 @@
  * Flow: load session → run agent loop → save result → emit reply event
  *
  * Key Inngest features used:
- * - Singleton concurrency (one run per chat at a time)
- * - cancelOn (new message cancels active run)
+ * - Singleton (one run per chat at a time)
  * - Step-based execution (each LLM call and tool is a step)
  */
 
@@ -19,14 +18,7 @@ export const handleMessage = inngest.createFunction(
     id: "agent-handle-message",
     retries: 2,
     triggers: [agentMessageReceived],
-    concurrency: [{ scope: "fn", key: "event.data.sessionKey", limit: 1 }],
-    cancelOn: [
-      {
-        event: "agent.message.received",
-        match: "data.sessionKey",
-        if: "async.data.destination.messageId != event.data.destination.messageId",
-      },
-    ],
+    singleton: { key: "event.data.sessionKey", mode: "cancel" },
   },
   async ({ event, step }) => {
     const {
