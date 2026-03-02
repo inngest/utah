@@ -6,10 +6,10 @@
  */
 
 import { getModel, complete, validateToolArguments } from "@mariozechner/pi-ai";
-import type { Tool, Message, AssistantMessage, KnownProvider } from "@mariozechner/pi-ai";
+import type { Tool, Message, AssistantMessage, KnownProvider, TextContent, ToolCall } from "@mariozechner/pi-ai";
 import { config } from "../config.ts";
 
-export type { Tool, Message, AssistantMessage };
+export type { Tool, Message, AssistantMessage, TextContent, ToolCall };
 export { validateToolArguments };
 
 let _model: ReturnType<typeof getModel> | null = null;
@@ -57,16 +57,13 @@ export async function callLLM(
   });
 
   const text = result.content
-    .filter((c) => c.type === "text")
-    .map((c) => (c as { type: "text"; text: string }).text)
+    .filter((c): c is TextContent => c.type === "text")
+    .map((c) => c.text)
     .join("");
 
   const toolCalls = result.content
-    .filter((c) => c.type === "toolCall")
-    .map((c) => {
-      const tc = c as { type: "toolCall"; id: string; name: string; arguments: Record<string, any> };
-      return { id: tc.id, name: tc.name, arguments: tc.arguments || {} };
-    });
+    .filter((c): c is ToolCall => c.type === "toolCall")
+    .map((c) => ({ id: c.id, name: c.name, arguments: c.arguments || {} }));
 
   return {
     message: result,

@@ -1,6 +1,6 @@
 {
   "name": "inngest-agent-example",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "A durable AI agent built with Inngest + pi-ai — think/act/observe loop, Telegram integration, local development via connect()",
   "type": "module",
   "scripts": {

@@ -7,16 +7,27 @@
 
 import { inngest } from "../client.ts";
 import { getChannel } from "../channels/index.ts";
+import type { Destination } from "../channels/types.ts";
+
+interface FailureEventData {
+  error: { message: string };
+  function_id: string;
+  run_id: string;
+  event: {
+    name: string;
+    data: {
+      channel?: string;
+      destination?: Destination;
+      channelMeta?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+  };
+}
 
 export const failureHandler = inngest.createFunction(
   { id: "global-failure-handler", retries: 1, triggers: [{ event: "inngest/function.failed" }] },
   async ({ event, step }) => {
-    const data = event.data as {
-      error: { message: string };
-      function_id: string;
-      run_id: string;
-      event: { name: string; data: Record<string, unknown> };
-    };
+    const data = event.data as FailureEventData;
 
     const functionId = data.function_id || "unknown";
     const errorMessage = data.error?.message || "Unknown error";
@@ -24,12 +35,12 @@ export const failureHandler = inngest.createFunction(
 
     console.error(`[failure] ${functionId}: ${errorMessage}`);
 
-    const channel = data.event?.data?.channel as string | undefined;
+    const channel = data.event?.data?.channel;
     const handler = channel ? getChannel(channel) : undefined;
 
     if (handler) {
-      const destination = data.event?.data?.destination as { chatId: string; messageId?: string; threadId?: string };
-      const channelMeta = (data.event?.data?.channelMeta as Record<string, unknown>) || {};
+      const destination = data.event?.data?.destination as Destination;
+      const channelMeta = data.event?.data?.channelMeta || {};
 
       await step.run("notify-channel", async () => {
         const response = [

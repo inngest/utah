@@ -17,7 +17,8 @@
  */
 
 import { config } from "./config.ts";
-import { callLLM, validateToolArguments, type Message } from "./lib/llm.ts";
+import { callLLM, validateToolArguments, type Message, type TextContent } from "./lib/llm.ts";
+import type { ToolResultMessage, UserMessage } from "@mariozechner/pi-ai";
 import { TOOLS, executeTool, type ToolResult } from "./lib/tools.ts";
 import { buildSystemPrompt, buildConversationHistory } from "./lib/context.ts";
 import { ensureWorkspace } from "./lib/memory.ts";
@@ -64,11 +65,11 @@ function pruneOldToolResults(messages: Message[]) {
 
   let totalToolChars = 0;
   for (let i = 0; i < pruneUpTo; i++) {
-    const msg = messages[i] as any;
+    const msg = messages[i];
     if (msg.role !== "toolResult") continue;
-    const content = Array.isArray(msg.content) ? msg.content : [];
-    for (const block of content) {
-      if (block.type === "text" && typeof block.text === "string") {
+    const trMsg = msg as ToolResultMessage;
+    for (const block of trMsg.content) {
+      if (block.type === "text") {
         totalToolChars += block.text.length;
       }
     }
@@ -77,17 +78,17 @@ function pruneOldToolResults(messages: Message[]) {
   const useHardClear = totalToolChars > PRUNING.hardClear.threshold;
 
   for (let i = 0; i < pruneUpTo; i++) {
-    const msg = messages[i] as any;
+    const msg = messages[i];
     if (msg.role !== "toolResult") continue;
-    const content = Array.isArray(msg.content) ? msg.content : [];
-    for (const block of content) {
-      if (block.type === "text" && typeof block.text === "string") {
+    const trMsg = msg as ToolResultMessage;
+    for (const block of trMsg.content) {
+      if (block.type === "text") {
         if (useHardClear) {
-          block.text = PRUNING.hardClear.placeholder;
+          (block as TextContent).text = PRUNING.hardClear.placeholder;
         } else if (block.text.length > PRUNING.softTrim.maxChars) {
           const head = block.text.slice(0, PRUNING.softTrim.headChars);
           const tail = block.text.slice(-PRUNING.softTrim.tailChars);
-          block.text = `${head}\n\n... [${block.text.length - PRUNING.softTrim.headChars - PRUNING.softTrim.tailChars} chars trimmed] ...\n\n${tail}`;
+          (block as TextContent).text = `${head}\n\n... [${block.text.length - PRUNING.softTrim.headChars - PRUNING.softTrim.tailChars} chars trimmed] ...\n\n${tail}`;
         }
       }
     }
@@ -254,12 +255,12 @@ export function createAgentLoop(
           if (toSummarize.length > 0) {
             const summaryText = toSummarize
               .map((m) => {
-                const role = (m as any).role?.toUpperCase() || "UNKNOWN";
+                const role = m.role.toUpperCase();
                 const text =
-                  typeof (m as any).content === "string"
-                    ? (m as any).content
+                  typeof m.content === "string"
+                    ? m.content
                     : "[complex content]";
-                return `${role}: ${typeof text === "string" ? text.slice(0, 200) : ""}`;
+                return `${role}: ${text.slice(0, 200)}`;
               })
               .join("\n");
 
