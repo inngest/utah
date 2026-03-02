@@ -219,4 +219,4 @@ This project uses [pi-ai](https://github.com/badlogic/pi-mono) (`@mariozechner/p
 
 ## License
 
-MIT
+Apache-2.0

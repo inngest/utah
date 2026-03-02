@@ -2,6 +2,7 @@
   "name": "inngest-agent-example",
   "version": "0.1.0",
   "description": "A durable AI agent built with Inngest + pi-ai — think/act/observe loop, Telegram integration, local development via connect()",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "INNGEST_DEV=1 node --watch --env-file=.env --experimental-strip-types --experimental-transform-types --no-warnings src/worker.ts",
