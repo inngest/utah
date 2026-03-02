@@ -17,11 +17,11 @@ function getBotToken(): string {
 /**
  * Call the Slack Web API.
  */
-export async function slackAPI(
+export async function slackAPI<T = Record<string, unknown>>(
   method: string,
   params: Record<string, unknown> = {},
   options: { timeout?: number } = {},
-): Promise<any> {
+): Promise<T> {
   const token = getBotToken();
   const res = await fetch(`${SLACK_API}/${method}`, {
     method: "POST",
@@ -32,10 +32,10 @@ export async function slackAPI(
     body: JSON.stringify(params),
     signal: AbortSignal.timeout(options.timeout ?? 10_000),
   });
-  
-  const data = await res.json() as { ok: boolean; error?: string; [key: string]: any };
+
+  const data = await res.json() as { ok: boolean; error?: string };
   if (!data.ok) throw new Error(`Slack ${method}: ${data.error}`);
-  return data;
+  return data as T;
 }
 
 /**
@@ -44,10 +44,10 @@ export async function slackAPI(
 export async function postMessage(
   channel: string,
   text: string,
-  options: { 
+  options: {
     threadTs?: string;
-    blocks?: any[];
-    attachments?: any[];
+    blocks?: unknown[];
+    attachments?: unknown[];
   } = {},
 ): Promise<{ ts: string; channel: string }> {
   const body: Record<string, unknown> = {

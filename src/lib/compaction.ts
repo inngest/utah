@@ -123,7 +123,7 @@ export async function runCompaction(
 
   const response = await callLLM(
     SUMMARIZATION_SYSTEM_PROMPT,
-    [{ role: "user", content: promptText } as any],
+    [{ role: "user" as const, content: promptText, timestamp: Date.now() }],
     [], // no tools for summarization
   );
 

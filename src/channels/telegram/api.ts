@@ -17,11 +17,11 @@ function getBotToken(): string {
 /**
  * Call the Telegram Bot API.
  */
-export async function telegramAPI(
+export async function telegramAPI<T = unknown>(
   method: string,
   params: Record<string, unknown> = {},
   options: { timeout?: number } = {},
-): Promise<any> {
+): Promise<T> {
   const token = getBotToken();
   const res = await fetch(`${TELEGRAM_API}${token}/${method}`, {
     method: "POST",
@@ -29,9 +29,9 @@ export async function telegramAPI(
     body: JSON.stringify(params),
     signal: AbortSignal.timeout(options.timeout ?? 10_000),
   });
-  const data = (await res.json()) as { ok: boolean; result?: any; description?: string };
+  const data = (await res.json()) as { ok: boolean; result?: unknown; description?: string };
   if (!data.ok) throw new Error(`Telegram ${method}: ${data.description}`);
-  return data.result;
+  return data.result as T;
 }
 
 /**
@@ -41,7 +41,7 @@ export async function sendMessage(
   chatId: string,
   text: string,
   options: { parseMode?: string } = {},
-): Promise<any> {
+): Promise<unknown> {
   const body: Record<string, unknown> = {
     chat_id: chatId,
     text,

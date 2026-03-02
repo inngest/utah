@@ -14,7 +14,7 @@
  */
 
 import { Type } from "@mariozechner/pi-ai";
-import type { Tool } from "@mariozechner/pi-ai";
+import type { Tool, TextContent } from "@mariozechner/pi-ai";
 import {
   createReadTool,
   createEditTool,
@@ -128,8 +128,8 @@ export async function executeTool(
 
       // Convert AgentToolResult to our ToolResult format
       const text = result.content
-        .filter((c) => c.type === "text")
-        .map((c) => (c as { type: "text"; text: string }).text)
+        .filter((c): c is TextContent => c.type === "text")
+        .map((c) => c.text)
         .join("\n");
 
       return { result: text || "(no output)" };

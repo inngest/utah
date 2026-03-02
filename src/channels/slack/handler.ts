@@ -9,7 +9,7 @@ import { markdownToSlackMrkdwn, stripMarkdown, splitMessage } from "./format.ts"
 /**
  * Slack-specific metadata passed through channelMeta.
  */
-interface SlackMeta {
+export interface SlackMeta {
   channelId?: string;
   teamId?: string;
   eventId?: string;
@@ -35,9 +35,10 @@ export async function sendReply({ response, destination, channelMeta }: SendRepl
       await postMessage(channel, markdownToSlackMrkdwn(chunk), {
         threadTs: threadId,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Fallback to plain text if formatting fails
-      if (err.message?.includes("invalid_blocks") || err.message?.includes("invalid_attachments")) {
+      const message = err instanceof Error ? err.message : "";
+      if (message.includes("invalid_blocks") || message.includes("invalid_attachments")) {
         await postMessage(channel, stripMarkdown(chunk), {
           threadTs: threadId,
         });

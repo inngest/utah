@@ -23,7 +23,7 @@ export async function setup(): Promise<void> {
       }
 
       // Check if the channel is configured (has required tokens)
-      const channelConfig = (config as any)[name];
+      const channelConfig = config[name as keyof typeof config] as Record<string, unknown> | undefined;
       if (!channelConfig?.botToken) {
         console.log(`⏭️  ${name}: skipped (no bot token configured)`);
         continue;

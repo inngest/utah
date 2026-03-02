@@ -36,9 +36,10 @@ export async function sendReply({ response, destination, channelMeta }: SendRepl
       await sendMessage(chatId, markdownToTelegramHTML(chunks[i]), {
         parseMode: "HTML",
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Fallback to plain text if HTML parsing fails
-      if (err.message?.includes("can't parse entities")) {
+      const message = err instanceof Error ? err.message : "";
+      if (message.includes("can't parse entities")) {
         await sendMessage(chatId, stripMarkdown(chunks[i]));
       } else {
         throw err;
