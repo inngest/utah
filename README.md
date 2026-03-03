@@ -40,9 +40,9 @@ The worker connects to Inngest Cloud via WebSocket. No public endpoint. No ngrok
 ### 2. Configure and Run
 
 ```bash
-git clone https://github.com/inngest/agent-example-utah
-cd agent-example-utah
-npm install
+git clone https://github.com/inngest/utah
+cd utah
+npm install # or pnpm
 cp .env.example .env
 ```
 
