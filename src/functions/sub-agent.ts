@@ -1,8 +1,8 @@
 /**
- * Sub-Agent — an isolated agent loop invoked by the parent via step.invoke().
+ * Sub-Agent — an isolated agent loop that can run sync or async.
  *
- * Runs in its own context window with a fresh conversation history.
- * The parent only sees the final summary response.
+ * Sync mode: invoked by parent via step.invoke(), returns result to parent.
+ * Async mode: triggered by event, runs independently, replies directly to user.
  *
  * The sub-agent does NOT have the delegate_task tool to prevent recursive spawning.
  */
@@ -18,10 +18,19 @@ export const subAgent = inngest.createFunction(
     triggers: [agentSubagentSpawn],
   },
   async ({ event, step }) => {
-    const { task, subSessionKey } = event.data;
+    const { task, subSessionKey, async: isAsync, channel, destination, channelMeta } = event.data;
 
     // Prepend sub-agent framing to the task
-    const framedTask = `## Sub-Agent Context
+    const framedTask = isAsync
+      ? `## Sub-Agent Context
+
+You are an async sub-agent spawned to handle a task independently.
+Complete the task below. Your final text response will be sent directly to the user.
+Be thorough and clear — this is your only chance to communicate the results.
+
+## Your Task
+${task}`
+      : `## Sub-Agent Context
 
 You are a sub-agent spawned by the parent session for a specific task.
 Complete the task below. Your final text response will be returned to the parent as a summary.
@@ -36,6 +45,19 @@ ${task}`;
       isSubAgent: true,
     });
     const result = await agentLoop(step);
+
+    // Async mode: reply directly to the user via the channel
+    if (isAsync && channel && destination) {
+      await step.sendEvent("async-reply", {
+        name: "agent.reply.ready",
+        data: {
+          response: result.response,
+          channel,
+          destination,
+          channelMeta: channelMeta || {},
+        },
+      });
+    }
 
     return result;
   },

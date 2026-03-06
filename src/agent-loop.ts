@@ -109,6 +109,16 @@ export interface AgentLoopOptions {
   tools?: typeof TOOLS;
   /** Whether this is a sub-agent (disables delegate_task handling). */
   isSubAgent?: boolean;
+  /** Channel routing info — needed for async sub-agents to reply to the user directly. */
+  channelRouting?: {
+    channel: string;
+    destination: {
+      chatId: string;
+      messageId?: string;
+      threadId?: string;
+    };
+    channelMeta: Record<string, unknown>;
+  };
 }
 
 /**
@@ -122,6 +132,7 @@ export function createAgentLoop(
 ) {
   return async (step: StepAPI): Promise<AgentRunResult> => {
     const tools = options?.tools ?? TOOLS;
+    const loopChannel = options?.channelRouting;
 
     // Ensure workspace directories exist (sessions, memory)
     await step.run("ensure-workspace", async () => {
@@ -296,7 +307,7 @@ export function createAgentLoop(
           let toolResult: ToolResult;
 
           if (tc.name === "delegate_task" && !options?.isSubAgent) {
-            // delegate_task uses step.invoke() to spawn a sub-agent function
+            // Sync delegation — step.invoke() blocks until sub-agent returns
             const subSessionKey = `sub-${sessionKey}-${Date.now()}`;
             const { subAgent } = await import("./functions/sub-agent.ts");
             const subResult = await step.invoke("sub-agent", {
@@ -309,6 +320,26 @@ export function createAgentLoop(
             });
             toolResult = {
               result: subResult?.response || "(Sub-agent returned no response)",
+            };
+          } else if (tc.name === "delegate_async_task" && !options?.isSubAgent) {
+            // Async delegation — fire event and move on, sub-agent replies directly to user
+            const subSessionKey = `sub-${sessionKey}-${Date.now()}`;
+            await step.sendEvent("spawn-async-sub-agent", {
+              name: "agent.subagent.spawn",
+              data: {
+                task: tc.arguments.task as string,
+                subSessionKey,
+                parentSessionKey: sessionKey,
+                async: true,
+                ...(loopChannel ? {
+                  channel: loopChannel.channel,
+                  destination: loopChannel.destination,
+                  channelMeta: loopChannel.channelMeta,
+                } : {}),
+              },
+            });
+            toolResult = {
+              result: "Async sub-agent has been spawned. It will reply directly to the user when complete. Continue your conversation — do NOT wait for a result.",
             };
           } else {
             toolResult = await step.run(

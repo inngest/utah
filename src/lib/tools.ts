@@ -78,6 +78,23 @@ You'll receive a summary of what it accomplished.`,
   }),
 };
 
+const delegateAsyncTaskTool: Tool = {
+  name: "delegate_async_task",
+  description: `Delegate a task to an async sub-agent that runs independently and replies directly to the user when done.
+Use this when:
+- The task is long-running or doesn't need to block your current conversation
+- You want to continue interacting with the user while the task runs in the background
+- The work is self-contained and the sub-agent can deliver results directly
+The sub-agent runs in its own context, does the work, and sends its response directly to the user.
+You will NOT receive the result — respond to the user acknowledging you've kicked it off.`,
+  parameters: Type.Object({
+    task: Type.String({
+      description:
+        "Clear, detailed description of what the sub-agent should do. Include file paths, goals, and constraints.",
+    }),
+  }),
+};
+
 // --- Exports ---
 
 /**
@@ -88,6 +105,7 @@ export const TOOLS: Tool[] = [
   rememberTool,
   webFetchTool,
   delegateTaskTool,
+  delegateAsyncTaskTool,
 ];
 
 /**
