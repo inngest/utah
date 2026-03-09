@@ -29,6 +29,7 @@ export const agentSubagentSpawn = eventType("agent.subagent.spawn", {
     subSessionKey: string;
     parentSessionKey: string;
     async?: boolean;
+    scheduledFor?: string;
     channel?: string;
     destination?: {
       chatId: string;

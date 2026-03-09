@@ -341,6 +341,46 @@ export function createAgentLoop(
             toolResult = {
               result: "Async sub-agent has been spawned. It will reply directly to the user when complete. Continue your conversation — do NOT wait for a result.",
             };
+          } else if (tc.name === "delegate_scheduled_task" && !options?.isSubAgent) {
+            // Scheduled delegation — fire event with a future timestamp
+            const subSessionKey = `sub-${sessionKey}-${Date.now()}`;
+            const scheduledFor = tc.arguments.scheduledFor as string;
+            const scheduledTs = new Date(scheduledFor).getTime();
+
+            if (isNaN(scheduledTs)) {
+              toolResult = {
+                result: `Invalid scheduledFor timestamp: "${scheduledFor}". Must be a valid ISO 8601 timestamp.`,
+                error: true,
+              };
+            } else {
+              await step.sendEvent("spawn-scheduled-sub-agent", {
+                name: "agent.subagent.spawn",
+                data: {
+                  task: tc.arguments.task as string,
+                  subSessionKey,
+                  parentSessionKey: sessionKey,
+                  async: true,
+                  scheduledFor,
+                  ...(loopChannel ? {
+                    channel: loopChannel.channel,
+                    destination: loopChannel.destination,
+                    channelMeta: loopChannel.channelMeta,
+                  } : {}),
+                },
+                ts: scheduledTs,
+              });
+              const readableTime = new Date(scheduledTs).toLocaleString("en-US", {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                timeZoneName: "short",
+              });
+              toolResult = {
+                result: `Task scheduled for ${readableTime}. The sub-agent will run at that time and reply directly to the user.`,
+              };
+            }
           } else {
             toolResult = await step.run(
               `tool-${tc.name}`,

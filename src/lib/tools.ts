@@ -95,6 +95,27 @@ You will NOT receive the result — respond to the user acknowledging you've kic
   }),
 };
 
+const delegateScheduledTaskTool: Tool = {
+  name: "delegate_scheduled_task",
+  description: `Schedule a task for a sub-agent to run at a specific time in the future.
+Use this when:
+- The user wants something done at a later time ("check on this tomorrow", "run this at 5pm")
+- A follow-up or reminder needs to execute with real work (not just a text reminder)
+- Time-sensitive tasks that should run at a specific moment
+The sub-agent will run at the scheduled time, do the work, and reply directly to the user.
+You will NOT receive the result — respond to the user confirming what was scheduled and when.`,
+  parameters: Type.Object({
+    task: Type.String({
+      description:
+        "Clear, detailed description of what the sub-agent should do. Include file paths, goals, and constraints.",
+    }),
+    scheduledFor: Type.String({
+      description:
+        "ISO 8601 timestamp for when the task should run (e.g. '2026-03-10T09:00:00-05:00'). Use the current time from the system prompt and the user's timezone to calculate this.",
+    }),
+  }),
+};
+
 // --- Exports ---
 
 /**
@@ -106,6 +127,7 @@ export const TOOLS: Tool[] = [
   webFetchTool,
   delegateTaskTool,
   delegateAsyncTaskTool,
+  delegateScheduledTaskTool,
 ];
 
 /**

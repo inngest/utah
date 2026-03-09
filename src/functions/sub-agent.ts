@@ -18,13 +18,18 @@ export const subAgent = inngest.createFunction(
     triggers: [agentSubagentSpawn],
   },
   async ({ event, step }) => {
-    const { task, subSessionKey, async: isAsync, channel, destination, channelMeta } = event.data;
+    const { task, subSessionKey, async: isAsync, scheduledFor, channel, destination, channelMeta } = event.data;
 
     // Prepend sub-agent framing to the task
+    const scheduledContext = scheduledFor
+      ? `\nThis task was scheduled earlier and is now running at the scheduled time (${scheduledFor}).
+The user may not remember the exact context — include enough background in your response.\n`
+      : "";
+
     const framedTask = isAsync
       ? `## Sub-Agent Context
 
-You are an async sub-agent spawned to handle a task independently.
+You are an async sub-agent spawned to handle a task independently.${scheduledContext}
 Complete the task below. Your final text response will be sent directly to the user.
 Be thorough and clear — this is your only chance to communicate the results.
 
