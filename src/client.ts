@@ -28,6 +28,15 @@ export const agentSubagentSpawn = eventType("agent.subagent.spawn", {
     task: string;
     subSessionKey: string;
     parentSessionKey: string;
+    async?: boolean;
+    scheduledFor?: string;
+    channel?: string;
+    destination?: {
+      chatId: string;
+      messageId?: string;
+      threadId?: string;
+    };
+    channelMeta?: Record<string, unknown>;
   }>(),
 });
 
