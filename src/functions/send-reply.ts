@@ -12,12 +12,12 @@ import { getChannel } from "../channels/index.ts";
 
 export const sendReply = inngest.createFunction(
   { id: "send-reply", retries: 3, triggers: [agentReplyReady] },
-  async ({ event, step }) => {
+  async ({ event, step, logger }) => {
     const { response, channel, destination, channelMeta } = event.data;
 
     const handler = getChannel(channel);
     if (!handler) {
-      console.warn(`Unknown channel: ${channel}`);
+      logger.warn({ channel }, `Unknown channel: ${channel}`);
       return { error: `Unknown channel: ${channel}` };
     }
 

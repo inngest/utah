@@ -17,7 +17,7 @@ export const subAgent = inngest.createFunction(
     retries: 1,
     triggers: [agentSubagentSpawn],
   },
-  async ({ event, step }) => {
+  async ({ event, step, logger }) => {
     const { task, subSessionKey, async: isAsync, scheduledFor, channel, destination, channelMeta } = event.data;
 
     // Prepend sub-agent framing to the task
@@ -49,7 +49,7 @@ ${task}`;
       tools: SUB_AGENT_TOOLS,
       isSubAgent: true,
     });
-    const result = await agentLoop(step);
+    const result = await agentLoop(step, logger);
 
     // Async mode: reply directly to the user via the channel
     if (isAsync && channel && destination) {

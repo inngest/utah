@@ -26,14 +26,14 @@ interface FailureEventData {
 
 export const failureHandler = inngest.createFunction(
   { id: "global-failure-handler", retries: 1, triggers: [{ event: "inngest/function.failed" }] },
-  async ({ event, step }) => {
+  async ({ event, step, logger }) => {
     const data = event.data as FailureEventData;
 
     const functionId = data.function_id || "unknown";
     const errorMessage = data.error?.message || "Unknown error";
     const runId = data.run_id || "unknown";
 
-    console.error(`[failure] ${functionId}: ${errorMessage}`);
+    logger.error({ functionId, runId, errorMessage }, `[failure] ${functionId}: ${errorMessage}`);
 
     const channel = data.event?.data?.channel;
     const handler = channel ? getChannel(channel) : undefined;

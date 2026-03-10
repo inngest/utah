@@ -12,6 +12,7 @@
 import { callLLM } from "./llm.ts";
 import { loadSession, writeSession, type SessionMessage } from "./session.ts";
 import { config } from "../config.ts";
+import type { Logger } from "inngest";
 
 // --- Summarization Prompts ---
 
@@ -98,6 +99,7 @@ function serializeConversation(messages: SessionMessage[]): string {
 export async function runCompaction(
   messages: SessionMessage[],
   sessionKey: string,
+  logger: Logger,
 ): Promise<SessionMessage[]> {
   // Find cut point: keep approximately keepRecentTokens worth of recent messages
   let recentTokens = 0;
@@ -141,8 +143,9 @@ export async function runCompaction(
   // Persist the compacted session
   await writeSession(sessionKey, compacted);
 
-  console.log(
-    `[compaction] ${messages.length} messages → ${compacted.length} (summarized ${toSummarize.length}, kept ${toKeep.length})`
+  logger.info(
+    { before: messages.length, after: compacted.length, summarized: toSummarize.length, kept: toKeep.length },
+    `[compaction] ${messages.length} messages → ${compacted.length}`,
   );
 
   return compacted;

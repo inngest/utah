@@ -25,6 +25,7 @@ import { ensureWorkspace } from "./lib/memory.ts";
 import { shouldCompact, runCompaction } from "./lib/compaction.ts";
 import type { SessionMessage } from "./lib/session.ts";
 import type { GetStepTools } from "inngest";
+import type { Logger } from "inngest";
 import type { inngest } from "./client.ts";
 import type { Destination } from "./channels/types.ts";
 
@@ -125,14 +126,14 @@ export interface AgentLoopOptions {
 
 /**
  * Create the agent loop for a given message and session.
- * Returns a function that takes an Inngest step API and runs the loop.
+ * Returns a function that takes an Inngest step API and logger and runs the loop.
  */
 export function createAgentLoop(
   userMessage: string,
   sessionKey: string,
   options?: AgentLoopOptions,
 ) {
-  return async (step: StepAPI): Promise<AgentRunResult> => {
+  return async (step: StepAPI, logger: Logger): Promise<AgentRunResult> => {
     const tools = options?.tools ?? TOOLS;
     const loopChannel = options?.channelRouting;
 
@@ -154,7 +155,7 @@ export function createAgentLoop(
     // Compact if conversation is getting too long
     if (shouldCompact(history)) {
       history = await step.run("compact", async () => {
-        return await runCompaction(history, sessionKey);
+        return await runCompaction(history, sessionKey, logger);
       });
     }
 
@@ -258,7 +259,7 @@ export function createAgentLoop(
 
         if (isOverflow && !hasCompactedThisRun) {
           // Context overflow — force-compact the conversation and retry this iteration
-          console.log(`[loop] Context overflow detected, force-compacting...`);
+          logger.warn("[loop] Context overflow detected, force-compacting...");
           hasCompactedThisRun = true;
 
           // Aggressive pruning: keep only the last few messages
@@ -322,6 +323,7 @@ export function createAgentLoop(
         // Act: execute each tool as a step
         for (const tc of toolCalls) {
           totalToolCalls++;
+          logger.info({ tool: tc.name, toolCallId: tc.id }, `[loop] Executing tool: ${tc.name}`);
 
           let toolResult: ToolResult;
 
@@ -440,7 +442,14 @@ export function createAgentLoop(
 
       // Log iteration
       if (llmResponse.usage) {
-        console.log(
+        logger.info(
+          {
+            iter: iterations,
+            tools: toolCalls.length,
+            tokensIn: llmResponse.usage.input || 0,
+            tokensOut: llmResponse.usage.output || 0,
+            cost: llmResponse.usage.cost?.total?.toFixed(4) || "?",
+          },
           `[loop] iter=${iterations} tools=${toolCalls.length} tokens=${llmResponse.usage.input || "?"}in/${llmResponse.usage.output || "?"}out cost=$${llmResponse.usage.cost?.total?.toFixed(4) || "?"}`,
         );
       }
