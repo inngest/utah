@@ -7,34 +7,35 @@
  *   node --experimental-strip-types src/setup.ts
  */
 
+import { logger } from "./lib/logger.ts";
 import { config } from "./config.ts";
 import { getChannel, getChannelNames } from "./channels/index.ts";
 
 export async function setup(): Promise<void> {
-  console.log(`\n🔧 Setting up ${config.agent.name}...\n`);
+  logger.info(`Setting up ${config.agent.name}...`);
 
   try {
     for (const name of getChannelNames()) {
       const handler = getChannel(name)!;
 
       if (!handler.setup) {
-        console.log(`⏭️  ${name}: no setup needed`);
+        logger.info({ channel: name }, `${name}: no setup needed`);
         continue;
       }
 
       // Check if the channel is configured (has required tokens)
       const channelConfig = config[name as keyof typeof config] as Record<string, unknown> | undefined;
       if (!channelConfig?.botToken) {
-        console.log(`⏭️  ${name}: skipped (no bot token configured)`);
+        logger.info({ channel: name }, `${name}: skipped (no bot token configured)`);
         continue;
       }
 
       await handler.setup();
     }
 
-    console.log("\n✅ Setup complete!\n");
+    logger.info("Setup complete");
   } catch (err) {
-    console.error("\n❌ Setup failed:", err instanceof Error ? err.message : err);
+    logger.fatal(err instanceof Error ? err : { err }, "Setup failed");
     process.exit(1);
   }
 }

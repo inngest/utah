@@ -13,6 +13,7 @@ import { subAgent } from "./functions/sub-agent.ts";
 import { ensureWorkspace } from "./lib/session.ts";
 import { setup } from "./setup.ts";
 import { config } from "./config.ts";
+import { logger } from "./lib/logger.ts";
 
 const functions = [
   handleMessage,
@@ -29,20 +30,19 @@ async function main() {
   // Ensure Inngest webhook + Telegram webhook are configured
   await setup();
 
-  console.log(`🤖 ${config.agent.name} starting...`);
-  console.log(`   Model: ${config.llm.provider}/${config.llm.model}`);
-  console.log(`   Workspace: ${config.workspace.root}`);
-  console.log(`   Functions: ${functions.length}`);
+  logger.info(
+    { agent: config.agent.name, model: `${config.llm.provider}/${config.llm.model}`, workspace: config.workspace.root, functions: functions.length },
+    `${config.agent.name} starting...`,
+  );
 
   await connect({
     apps: [{ client: inngest, functions }],
     handleShutdownSignals: ["SIGTERM", "SIGINT"],
   });
-  console.log(`   Inngest: WebSocket connected`);
-  console.log(`\n✅ ${config.agent.name} is alive\n`);
+  logger.info(`${config.agent.name} is alive — Inngest WebSocket connected`);
 }
 
 main().catch((e) => {
-  console.error("Fatal error:", e);
+  logger.fatal(e, "Fatal error");
   process.exit(1);
 });

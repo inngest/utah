@@ -3,6 +3,7 @@ import { extendedTracesMiddleware } from "inngest/experimental";
 const extendedTraces = extendedTracesMiddleware();
 
 import { Inngest, eventType, staticSchema } from "inngest";
+import { logger } from "./lib/logger.ts";
 
 import type { AgentMessageData, AgentReplyData } from "./channels/types.ts";
 
@@ -35,4 +36,5 @@ export const inngest = new Inngest({
   id: "ai-agent",
   checkpointing: true,
   middleware: [extendedTraces],
+  logger,
 });
