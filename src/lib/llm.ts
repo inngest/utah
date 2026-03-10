@@ -6,7 +6,14 @@
  */
 
 import { getModel, complete, validateToolArguments } from "@mariozechner/pi-ai";
-import type { Tool, Message, AssistantMessage, KnownProvider, TextContent, ToolCall } from "@mariozechner/pi-ai";
+import type {
+  Tool,
+  Message,
+  AssistantMessage,
+  KnownProvider,
+  TextContent,
+  ToolCall,
+} from "@mariozechner/pi-ai";
 import { config } from "../config.ts";
 
 export type { Tool, Message, AssistantMessage, TextContent, ToolCall };
@@ -19,10 +26,7 @@ export function getConfiguredModel() {
     // Provider and model come from runtime config (env vars).
     // getModel's generics require literal types from the MODELS registry,
     // so we assert here — an invalid combo will throw at runtime.
-    _model = getModel(
-      config.llm.provider as KnownProvider as any,
-      config.llm.model as any,
-    );
+    _model = getModel(config.llm.provider as KnownProvider as any, config.llm.model as any);
     if (!_model) {
       throw new Error(
         `Unknown model "${config.llm.model}" for provider "${config.llm.provider}". Check AGENT_MODEL and LLM_PROVIDER env vars.`,

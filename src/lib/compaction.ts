@@ -144,7 +144,12 @@ export async function runCompaction(
   await writeSession(sessionKey, compacted);
 
   logger.info(
-    { before: messages.length, after: compacted.length, summarized: toSummarize.length, kept: toKeep.length },
+    {
+      before: messages.length,
+      after: compacted.length,
+      summarized: toSummarize.length,
+      kept: toKeep.length,
+    },
     `[compaction] ${messages.length} messages → ${compacted.length}`,
   );
 

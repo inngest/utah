@@ -31,19 +31,15 @@ export async function ensureInngestWebhook(): Promise<WebhookData> {
 
   const { data: webhooks } = await inngestFetch("/v2/env/webhooks");
 
-  let webhook: WebhookData | undefined = webhooks.find(
-    (w: WebhookData) => w.name === WEBHOOK_NAME,
-  );
+  let webhook: WebhookData | undefined = webhooks.find((w: WebhookData) => w.name === WEBHOOK_NAME);
 
   if (webhook) {
     console.log(`   Found existing webhook: ${webhook.id}`);
 
     // Compare transforms and response handler (normalize whitespace)
     const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
-    const transformStale =
-      normalize(webhook.transform || "") !== normalize(TRANSFORM_SOURCE);
-    const responseStale =
-      normalize(webhook.response || "") !== normalize(RESPONSE_SOURCE);
+    const transformStale = normalize(webhook.transform || "") !== normalize(TRANSFORM_SOURCE);
+    const responseStale = normalize(webhook.response || "") !== normalize(RESPONSE_SOURCE);
     if (transformStale || responseStale) {
       console.log("   ⚠️  Webhook config is out of date — recreating...");
       const { data: created } = await inngestFetch("/v2/env/webhooks", {
@@ -85,10 +81,6 @@ export async function setupSlack(): Promise<void> {
 
   const webhook = await ensureInngestWebhook();
   console.log(`\n📋 Slack webhook URL: ${webhook.url}`);
-  console.log(
-    "   Configure this URL in your Slack app's Event Subscriptions settings",
-  );
-  console.log(
-    "   Subscribe to: message.channels, message.groups, message.im, message.mpim",
-  );
+  console.log("   Configure this URL in your Slack app's Event Subscriptions settings");
+  console.log("   Subscribe to: message.channels, message.groups, message.im, message.mpim");
 }

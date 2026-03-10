@@ -31,9 +31,7 @@ export async function ensureInngestWebhook(): Promise<WebhookData> {
 
   const { data: webhooks } = await inngestFetch("/v2/env/webhooks");
 
-  let webhook: WebhookData | undefined = webhooks.find(
-    (w: WebhookData) => w.name === WEBHOOK_NAME,
-  );
+  let webhook: WebhookData | undefined = webhooks.find((w: WebhookData) => w.name === WEBHOOK_NAME);
 
   if (webhook) {
     console.log(`   Found existing webhook: ${webhook.id}`);
@@ -77,7 +75,9 @@ export async function ensureTelegramWebhook(inngestWebhookUrl: string): Promise<
     console.log(`   URL: ${inngestWebhookUrl}`);
     if (info.last_error_date) {
       const errorAge = Date.now() / 1000 - info.last_error_date;
-      console.log(`   ⚠️  Last error (${Math.round(errorAge / 60)}min ago): ${info.last_error_message}`);
+      console.log(
+        `   ⚠️  Last error (${Math.round(errorAge / 60)}min ago): ${info.last_error_message}`,
+      );
     }
     return;
   }

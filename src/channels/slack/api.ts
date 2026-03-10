@@ -27,13 +27,13 @@ export async function slackAPI<T = Record<string, unknown>>(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(params),
     signal: AbortSignal.timeout(options.timeout ?? 10_000),
   });
 
-  const data = await res.json() as { ok: boolean; error?: string };
+  const data = (await res.json()) as { ok: boolean; error?: string };
   if (!data.ok) throw new Error(`Slack ${method}: ${data.error}`);
   return data as T;
 }
@@ -54,27 +54,27 @@ export async function postMessage(
     channel,
     text,
   };
-  
+
   if (options.threadTs) body.thread_ts = options.threadTs;
   if (options.blocks) body.blocks = options.blocks;
   if (options.attachments) body.attachments = options.attachments;
-  
+
   return slackAPI("chat.postMessage", body);
 }
 
 /**
  * Add a reaction to a message.
  */
-export async function addReaction(
-  channel: string,
-  timestamp: string,
-  name: string,
-): Promise<void> {
-  await slackAPI("reactions.add", {
-    channel,
-    timestamp,
-    name,
-  }, { timeout: 5000 }).catch(() => {});
+export async function addReaction(channel: string, timestamp: string, name: string): Promise<void> {
+  await slackAPI(
+    "reactions.add",
+    {
+      channel,
+      timestamp,
+      name,
+    },
+    { timeout: 5000 },
+  ).catch(() => {});
 }
 
 /**

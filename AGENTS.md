@@ -26,6 +26,7 @@ No test runner is configured. There is no build step — Node runs TypeScript di
 **Event flow**: Channel webhook → Inngest event (`agent.message.received`) → agent loop → reply event (`agent.reply.ready`) → channel handler
 
 **Key patterns**:
+
 - The agent loop (`src/agent-loop.ts`) is a while loop where each iteration is an Inngest step
 - Every Inngest function is in `src/functions/` — each file exports one function
 - Channels implement the `ChannelHandler` interface (`src/channels/types.ts`) with `sendReply`, `acknowledge`, and optional `setup`

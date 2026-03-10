@@ -54,7 +54,11 @@ export async function sendMessage(
  * Send typing indicator to a chat.
  */
 export async function sendTyping(chatId: string): Promise<void> {
-  await telegramAPI("sendChatAction", { chat_id: chatId, action: "typing" }, { timeout: 5000 }).catch(() => {});
+  await telegramAPI(
+    "sendChatAction",
+    { chat_id: chatId, action: "typing" },
+    { timeout: 5000 },
+  ).catch(() => {});
 }
 
 /**

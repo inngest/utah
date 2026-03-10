@@ -49,9 +49,7 @@ export async function buildSystemPrompt(): Promise<string> {
   } else if (identity) {
     parts.push(identity);
   } else {
-    parts.push(
-      `You are ${config.agent.name}, a helpful AI assistant powered by Inngest.`,
-    );
+    parts.push(`You are ${config.agent.name}, a helpful AI assistant powered by Inngest.`);
   }
 
   // User info

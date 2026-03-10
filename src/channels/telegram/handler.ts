@@ -23,7 +23,11 @@ interface TelegramMeta {
  * Send an agent reply to Telegram. Handles HTML conversion,
  * message splitting, and plain text fallback.
  */
-export async function sendReply({ response, destination, channelMeta }: SendReplyParams): Promise<void> {
+export async function sendReply({
+  response,
+  destination,
+  channelMeta,
+}: SendReplyParams): Promise<void> {
   const { chatId, messageId } = destination;
 
   // Send typing first

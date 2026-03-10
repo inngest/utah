@@ -87,8 +87,7 @@ export function transform(
   const text = msg.text!; // Safe — guarded by the check above
   const chatId = String(msg.chat.id);
   const displayName =
-    [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") ||
-    "Unknown";
+    [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Unknown";
 
   return {
     id: `telegram.${msg.message_id}`,
@@ -105,9 +104,7 @@ export function transform(
       destination: {
         chatId,
         messageId: String(msg.message_id),
-        threadId: msg.message_thread_id
-          ? String(msg.message_thread_id)
-          : undefined,
+        threadId: msg.message_thread_id ? String(msg.message_thread_id) : undefined,
       },
       channelMeta: {
         chatType: msg.chat.type,

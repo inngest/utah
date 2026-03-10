@@ -31,7 +31,12 @@ async function main() {
   await setup();
 
   logger.info(
-    { agent: config.agent.name, model: `${config.llm.provider}/${config.llm.model}`, workspace: config.workspace.root, functions: functions.length },
+    {
+      agent: config.agent.name,
+      model: `${config.llm.provider}/${config.llm.model}`,
+      workspace: config.workspace.root,
+      functions: functions.length,
+    },
     `${config.agent.name} starting...`,
   );
 

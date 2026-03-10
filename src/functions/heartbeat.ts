@@ -20,8 +20,12 @@
 import { inngest } from "../client.ts";
 import { config } from "../config.ts";
 import {
-  readMemory, writeMemory, readDailyLog,
-  parseLastHeartbeat, stripTimestamp, appendTimestamp,
+  readMemory,
+  writeMemory,
+  readDailyLog,
+  parseLastHeartbeat,
+  stripTimestamp,
+  appendTimestamp,
 } from "../lib/memory.ts";
 import { callLLM } from "../lib/llm.ts";
 import { readdir, unlink } from "fs/promises";
@@ -30,9 +34,9 @@ import { resolve } from "path";
 // --- Config ---
 
 const HEARTBEAT_CRON = process.env.HEARTBEAT_CRON || "*/30 * * * *"; // Every 30 minutes
-const LOG_SIZE_THRESHOLD = 4096;  // Bytes — distill when daily log exceeds this
-const MAX_HOURS_BETWEEN = 8;      // Force distill after this many hours
-const DAYS_TO_REVIEW = 7;        // Review last 7 days of logs
+const LOG_SIZE_THRESHOLD = 4096; // Bytes — distill when daily log exceeds this
+const MAX_HOURS_BETWEEN = 8; // Force distill after this many hours
+const DAYS_TO_REVIEW = 7; // Review last 7 days of logs
 const DAYS_TO_KEEP = parseInt(process.env.MEMORY_RETENTION_DAYS || "30"); // Prune daily logs older than this
 
 // --- Helpers ---
@@ -77,8 +81,7 @@ export const heartbeat = inngest.createFunction(
         ? (Date.now() - lastHeartbeat.getTime()) / (1000 * 60 * 60)
         : Infinity; // Never run before — always distill
 
-      const shouldDistill =
-        logSize > LOG_SIZE_THRESHOLD || hoursSinceLast > MAX_HOURS_BETWEEN;
+      const shouldDistill = logSize > LOG_SIZE_THRESHOLD || hoursSinceLast > MAX_HOURS_BETWEEN;
 
       return {
         shouldDistill,

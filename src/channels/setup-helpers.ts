@@ -23,7 +23,7 @@ export async function inngestFetch(path: string, options: RequestInit = {}): Pro
   const res = await fetch(`${INNGEST_API}${path}`, {
     ...options,
     headers: {
-      "Authorization": `Bearer ${getSigningKey()}`,
+      Authorization: `Bearer ${getSigningKey()}`,
       "Content-Type": "application/json",
       ...envHeaders,
       ...options.headers,

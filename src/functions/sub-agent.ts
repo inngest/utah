@@ -18,7 +18,15 @@ export const subAgent = inngest.createFunction(
     triggers: [agentSubagentSpawn],
   },
   async ({ event, step, logger }) => {
-    const { task, subSessionKey, async: isAsync, scheduledFor, channel, destination, channelMeta } = event.data;
+    const {
+      task,
+      subSessionKey,
+      async: isAsync,
+      scheduledFor,
+      channel,
+      destination,
+      channelMeta,
+    } = event.data;
 
     // Prepend sub-agent framing to the task
     const scheduledContext = scheduledFor

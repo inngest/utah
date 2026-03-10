@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "INNGEST_DEV=1 node --watch --env-file=.env --experimental-strip-types --experimental-transform-types --no-warnings src/worker.ts",
     "start": "node --env-file=.env --experimental-strip-types --experimental-transform-types --no-warnings src/worker.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
   },
   "dependencies": {
     "@mariozechner/pi-agent-core": "^0.54.2",
@@ -19,7 +22,13 @@
   },
   "devDependencies": {
     "@types/node": "^25.2.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.3",
+    "prettier": "^3.8.1",
     "typescript": "^5.9.3"
+  },
+  "lint-staged": {
+    "*.{ts,js,json,md}": "prettier --write"
   },
   "engines": {
     "node": ">=23.0.0",

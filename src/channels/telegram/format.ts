@@ -12,7 +12,10 @@ const TELEGRAM_MAX_LENGTH = 4096;
  */
 export function markdownToTelegramHTML(text: string): string {
   let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  html = html.replace(/```\w*\n([\s\S]*?)```/g, (_m, code) => `<pre><code>${code.trimEnd()}</code></pre>`);
+  html = html.replace(
+    /```\w*\n([\s\S]*?)```/g,
+    (_m, code) => `<pre><code>${code.trimEnd()}</code></pre>`,
+  );
   html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
   html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
   html = html.replace(/(?<!\w)\*(.+?)\*(?!\w)/g, "<i>$1</i>");

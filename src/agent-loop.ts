@@ -91,7 +91,8 @@ function pruneOldToolResults(messages: Message[]) {
         } else if (block.text.length > PRUNING.softTrim.maxChars) {
           const head = block.text.slice(0, PRUNING.softTrim.headChars);
           const tail = block.text.slice(-PRUNING.softTrim.tailChars);
-          (block as TextContent).text = `${head}\n\n... [${block.text.length - PRUNING.softTrim.headChars - PRUNING.softTrim.tailChars} chars trimmed] ...\n\n${tail}`;
+          (block as TextContent).text =
+            `${head}\n\n... [${block.text.length - PRUNING.softTrim.headChars - PRUNING.softTrim.tailChars} chars trimmed] ...\n\n${tail}`;
         }
       }
     }
@@ -248,10 +249,7 @@ export function createAgentLoop(
 
       // If the LLM returned an error, check if it's a context overflow
       if (llmResponse.stopReason === "error") {
-        const errMsg =
-          llmResponse.message.errorMessage ||
-          llmResponse.text ||
-          "Unknown LLM error";
+        const errMsg = llmResponse.message.errorMessage || llmResponse.text || "Unknown LLM error";
         const isOverflow =
           /context.?overflow|prompt.?too.?large|too many tokens|maximum context|token limit/i.test(
             errMsg,
@@ -271,10 +269,7 @@ export function createAgentLoop(
             const summaryText = toSummarize
               .map((m) => {
                 const role = m.role.toUpperCase();
-                const text =
-                  typeof m.content === "string"
-                    ? m.content
-                    : "[complex content]";
+                const text = typeof m.content === "string" ? m.content : "[complex content]";
                 return `${role}: ${text.slice(0, 200)}`;
               })
               .join("\n");
@@ -352,11 +347,13 @@ export function createAgentLoop(
                 subSessionKey,
                 parentSessionKey: sessionKey,
                 async: true,
-                ...(loopChannel ? {
-                  channel: loopChannel.channel,
-                  destination: loopChannel.destination,
-                  channelMeta: loopChannel.channelMeta,
-                } : {}),
+                ...(loopChannel
+                  ? {
+                      channel: loopChannel.channel,
+                      destination: loopChannel.destination,
+                      channelMeta: loopChannel.channelMeta,
+                    }
+                  : {}),
               },
             });
             const asyncEventId = asyncEvent?.ids?.[0] || "unknown";
@@ -383,11 +380,13 @@ export function createAgentLoop(
                   parentSessionKey: sessionKey,
                   async: true,
                   scheduledFor,
-                  ...(loopChannel ? {
-                    channel: loopChannel.channel,
-                    destination: loopChannel.destination,
-                    channelMeta: loopChannel.channelMeta,
-                  } : {}),
+                  ...(loopChannel
+                    ? {
+                        channel: loopChannel.channel,
+                        destination: loopChannel.destination,
+                        channelMeta: loopChannel.channelMeta,
+                      }
+                    : {}),
                 },
                 ts: scheduledTs,
               });

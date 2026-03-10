@@ -132,9 +132,7 @@ export async function buildMemoryContext(): Promise<string> {
   const raw = await readMemory();
   const memory = stripTimestamp(raw).trim();
   const today = await readDailyLog();
-  const yesterday = await readDailyLog(
-    new Date(Date.now() - 86400000).toISOString().split("T")[0],
-  );
+  const yesterday = await readDailyLog(new Date(Date.now() - 86400000).toISOString().split("T")[0]);
 
   const parts: string[] = [];
 

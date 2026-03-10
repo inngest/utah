@@ -83,7 +83,9 @@ interface SlackEvent {
 
 export function transform(
   evt: SlackEvent,
-): { id?: string; name: string; data: AgentMessageData | SlackEvent | Record<string, unknown> } | undefined {
+):
+  | { id?: string; name: string; data: AgentMessageData | SlackEvent | Record<string, unknown> }
+  | undefined {
   // URL verification is handled by the response function;
   // return a no-op event so the transform doesn't error
   if (evt.type === "url_verification") {

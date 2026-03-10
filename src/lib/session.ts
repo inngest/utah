@@ -54,10 +54,7 @@ export async function appendToSession(
 /**
  * Rewrite the entire session file (used after compaction).
  */
-export async function writeSession(
-  sessionKey: string,
-  messages: SessionMessage[],
-): Promise<void> {
+export async function writeSession(sessionKey: string, messages: SessionMessage[]): Promise<void> {
   const path = sessionPath(sessionKey);
   await mkdir(dirname(path), { recursive: true });
   const content = messages.map((m) => JSON.stringify(m)).join("\n") + "\n";

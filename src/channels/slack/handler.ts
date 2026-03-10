@@ -22,7 +22,11 @@ export interface SlackMeta {
  * Send an agent reply to Slack. Handles mrkdwn conversion,
  * message splitting, and plain text fallback.
  */
-export async function sendReply({ response, destination, channelMeta }: SendReplyParams): Promise<void> {
+export async function sendReply({
+  response,
+  destination,
+  channelMeta,
+}: SendReplyParams): Promise<void> {
   const { threadId } = destination;
   const meta = channelMeta as SlackMeta;
   // Use the raw Slack channel ID from channelMeta (chatId is a compound routing key)
