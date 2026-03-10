@@ -78,6 +78,44 @@ You'll receive a summary of what it accomplished.`,
   }),
 };
 
+const delegateAsyncTaskTool: Tool = {
+  name: "delegate_async_task",
+  description: `Delegate a task to an async sub-agent that runs independently and replies directly to the user when done.
+Use this when:
+- The task is long-running or doesn't need to block your current conversation
+- You want to continue interacting with the user while the task runs in the background
+- The work is self-contained and the sub-agent can deliver results directly
+The sub-agent runs in its own context, does the work, and sends its response directly to the user.
+You will NOT receive the result — respond to the user acknowledging you've kicked it off.`,
+  parameters: Type.Object({
+    task: Type.String({
+      description:
+        "Clear, detailed description of what the sub-agent should do. Include file paths, goals, and constraints.",
+    }),
+  }),
+};
+
+const delegateScheduledTaskTool: Tool = {
+  name: "delegate_scheduled_task",
+  description: `Schedule a task for a sub-agent to run at a specific time in the future.
+Use this when:
+- The user wants something done at a later time ("check on this tomorrow", "run this at 5pm")
+- A follow-up or reminder needs to execute with real work (not just a text reminder)
+- Time-sensitive tasks that should run at a specific moment
+The sub-agent will run at the scheduled time, do the work, and reply directly to the user.
+You will NOT receive the result — respond to the user confirming what was scheduled and when.`,
+  parameters: Type.Object({
+    task: Type.String({
+      description:
+        "Clear, detailed description of what the sub-agent should do. Include file paths, goals, and constraints.",
+    }),
+    scheduledFor: Type.String({
+      description:
+        "ISO 8601 timestamp for when the task should run (e.g. '2026-03-10T09:00:00-05:00'). Use the current time from the system prompt and the user's timezone to calculate this.",
+    }),
+  }),
+};
+
 // --- Exports ---
 
 /**
@@ -88,6 +126,8 @@ export const TOOLS: Tool[] = [
   rememberTool,
   webFetchTool,
   delegateTaskTool,
+  delegateAsyncTaskTool,
+  delegateScheduledTaskTool,
 ];
 
 /**

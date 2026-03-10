@@ -27,6 +27,7 @@ import type { SessionMessage } from "./lib/session.ts";
 import type { GetStepTools } from "inngest";
 import type { Logger } from "inngest";
 import type { inngest } from "./client.ts";
+import type { Destination } from "./channels/types.ts";
 
 // --- Types ---
 
@@ -35,6 +36,7 @@ export interface AgentRunResult {
   iterations: number;
   toolCalls: number;
   model: string;
+  incrementalRepliesSent: number;
 }
 
 // --- Context Pruning ---
@@ -110,6 +112,16 @@ export interface AgentLoopOptions {
   tools?: typeof TOOLS;
   /** Whether this is a sub-agent (disables delegate_task handling). */
   isSubAgent?: boolean;
+  /** Channel routing info — needed for async sub-agents to reply to the user directly. */
+  channelRouting?: {
+    channel: string;
+    destination: {
+      chatId: string;
+      messageId?: string;
+      threadId?: string;
+    };
+    channelMeta: Record<string, unknown>;
+  };
 }
 
 /**
@@ -123,6 +135,7 @@ export function createAgentLoop(
 ) {
   return async (step: StepAPI, logger: Logger): Promise<AgentRunResult> => {
     const tools = options?.tools ?? TOOLS;
+    const loopChannel = options?.channelRouting;
 
     // Ensure workspace directories exist (sessions, memory)
     await step.run("ensure-workspace", async () => {
@@ -195,6 +208,7 @@ export function createAgentLoop(
     let finalResponse = "";
     let done = false;
     let hasCompactedThisRun = false;
+    const emittedTextParts: string[] = [];
 
     while (!done && iterations < config.loop.maxIterations) {
       iterations++;
@@ -290,6 +304,22 @@ export function createAgentLoop(
         // stopReason, usage, timestamp) — required by transformMessages() on next iteration
         messages.push(llmResponse.message);
 
+        // Incremental reply: if the LLM returned text alongside tool calls,
+        // send it to the user immediately so they see progress
+        if (config.incrementalReplies && llmResponse.text && loopChannel) {
+          await step.sendEvent(`incremental-reply-${iterations}`, {
+            name: "agent.reply.ready",
+            data: {
+              response: llmResponse.text,
+              channel: loopChannel.channel,
+              destination: loopChannel.destination,
+              channelMeta: loopChannel.channelMeta,
+            },
+          });
+          // Track emitted text so we can exclude it from the final response
+          emittedTextParts.push(llmResponse.text);
+        }
+
         // Act: execute each tool as a step
         for (const tc of toolCalls) {
           totalToolCalls++;
@@ -298,7 +328,7 @@ export function createAgentLoop(
           let toolResult: ToolResult;
 
           if (tc.name === "delegate_task" && !options?.isSubAgent) {
-            // delegate_task uses step.invoke() to spawn a sub-agent function
+            // Sync delegation — step.invoke() blocks until sub-agent returns
             const subSessionKey = `sub-${sessionKey}-${Date.now()}`;
             const { subAgent } = await import("./functions/sub-agent.ts");
             const subResult = await step.invoke("sub-agent", {
@@ -312,6 +342,68 @@ export function createAgentLoop(
             toolResult = {
               result: subResult?.response || "(Sub-agent returned no response)",
             };
+          } else if (tc.name === "delegate_async_task" && !options?.isSubAgent) {
+            // Async delegation — fire event and move on, sub-agent replies directly to user
+            const subSessionKey = `sub-${sessionKey}-${Date.now()}`;
+            const asyncEvent = await step.sendEvent("spawn-async-sub-agent", {
+              name: "agent.subagent.spawn",
+              data: {
+                task: tc.arguments.task as string,
+                subSessionKey,
+                parentSessionKey: sessionKey,
+                async: true,
+                ...(loopChannel ? {
+                  channel: loopChannel.channel,
+                  destination: loopChannel.destination,
+                  channelMeta: loopChannel.channelMeta,
+                } : {}),
+              },
+            });
+            const asyncEventId = asyncEvent?.ids?.[0] || "unknown";
+            toolResult = {
+              result: `Async sub-agent has been spawned (event ID: ${asyncEventId}). It will reply directly to the user when complete. Continue your conversation — do NOT wait for a result.`,
+            };
+          } else if (tc.name === "delegate_scheduled_task" && !options?.isSubAgent) {
+            // Scheduled delegation — fire event with a future timestamp
+            const subSessionKey = `sub-${sessionKey}-${Date.now()}`;
+            const scheduledFor = tc.arguments.scheduledFor as string;
+            const scheduledTs = new Date(scheduledFor).getTime();
+
+            if (isNaN(scheduledTs)) {
+              toolResult = {
+                result: `Invalid scheduledFor timestamp: "${scheduledFor}". Must be a valid ISO 8601 timestamp.`,
+                error: true,
+              };
+            } else {
+              const scheduledEvent = await step.sendEvent("spawn-scheduled-sub-agent", {
+                name: "agent.subagent.spawn",
+                data: {
+                  task: tc.arguments.task as string,
+                  subSessionKey,
+                  parentSessionKey: sessionKey,
+                  async: true,
+                  scheduledFor,
+                  ...(loopChannel ? {
+                    channel: loopChannel.channel,
+                    destination: loopChannel.destination,
+                    channelMeta: loopChannel.channelMeta,
+                  } : {}),
+                },
+                ts: scheduledTs,
+              });
+              const scheduledEventId = scheduledEvent?.ids?.[0] || "unknown";
+              const readableTime = new Date(scheduledTs).toLocaleString("en-US", {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                timeZoneName: "short",
+              });
+              toolResult = {
+                result: `Task scheduled for ${readableTime} (event ID: ${scheduledEventId}). The sub-agent will run at that time and reply directly to the user.`,
+              };
+            }
           } else {
             toolResult = await step.run(
               `tool-${tc.name}`,
@@ -372,6 +464,7 @@ export function createAgentLoop(
       iterations,
       toolCalls: totalToolCalls,
       model: `${config.llm.provider}/${config.llm.model}`,
+      incrementalRepliesSent: emittedTextParts.length,
     };
   };
 }

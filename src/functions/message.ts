@@ -35,7 +35,9 @@ export const handleMessage = inngest.createFunction(
     });
 
     // Run the agent loop — each think/tool is a durable step
-    const agentLoop = createAgentLoop(message, sessionKey);
+    const agentLoop = createAgentLoop(message, sessionKey, {
+      channelRouting: destination ? { channel, destination, channelMeta } : undefined,
+    });
     const result = await agentLoop(step, logger);
 
     // Save the response
