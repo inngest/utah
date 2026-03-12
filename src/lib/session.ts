@@ -9,6 +9,7 @@ import { readFile, writeFile, appendFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { config } from "../config.ts";
+import { logger } from "./logger.ts";
 
 export interface SessionMessage {
   role: string;
@@ -21,10 +22,80 @@ function sessionPath(sessionKey: string): string {
   return resolve(config.workspace.root, config.workspace.sessionDir, `${sessionKey}.jsonl`);
 }
 
+/**
+ * Template files scaffolded on first run.
+ * Only created if they don't already exist — never overwrites.
+ */
+const SCAFFOLD_FILES: Record<string, string> = {
+  "SOUL.md": `# Soul
+<!-- Who is this agent? Fill this in to define personality and behavior. -->
+
+## Name
+<!-- e.g. Utah -->
+
+## Personality
+<!-- e.g. Curious, helpful, slightly sarcastic -->
+
+## Vibe
+<!-- e.g. Chill but focused. Like a friendly coworker. -->
+
+## Guidelines
+<!-- Any rules or principles this agent should follow -->
+`,
+
+  "IDENTITY.md": `# Identity
+<!-- Quick-reference identity card for this agent. -->
+
+- **Name:**
+- **Creature type:** <!-- e.g. AI assistant, desert spirit, robot -->
+- **Emoji:** <!-- e.g. 🏜️ -->
+`,
+
+  "USER.md": `# User
+<!-- Info about the human this agent works with. -->
+
+- **Name:**
+- **Timezone:**
+- **Preferences:**
+<!-- Add anything that helps the agent be more useful -->
+`,
+
+  "MEMORY.md": `# Long-Term Memory
+<!-- This file is the agent's curated long-term memory.
+     The agent reads it each session for continuity.
+     It can be updated manually or by the agent itself.
+     Keep it concise — distilled insights, not raw logs. -->
+`,
+};
+
 export async function ensureWorkspace(root: string): Promise<void> {
-  const dirs = [root, resolve(root, config.workspace.sessionDir)];
+  const dirs = [
+    root,
+    resolve(root, config.workspace.sessionDir),
+    resolve(root, config.workspace.memoryDir),
+  ];
   for (const dir of dirs) {
-    if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+    if (!existsSync(dir)) {
+      await mkdir(dir, { recursive: true });
+      logger.info(`Created directory: ${dir}`);
+    }
+  }
+
+  // Scaffold template files (never overwrite existing)
+  let created = 0;
+  for (const [filename, content] of Object.entries(SCAFFOLD_FILES)) {
+    const filePath = resolve(root, filename);
+    if (!existsSync(filePath)) {
+      await writeFile(filePath, content, "utf-8");
+      logger.info(`Created ${filename}`);
+      created++;
+    }
+  }
+
+  if (created === 0) {
+    logger.info("Workspace already initialized");
+  } else {
+    logger.info(`Scaffolded ${created} file(s) in workspace`);
   }
 }
 

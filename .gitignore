@@ -5,8 +5,9 @@ dist/
 .DS_Store
 NOTES.md
 
-# Workspace: keep context templates, ignore runtime data
-workspace/sessions/
-workspace/memory.md
+# Workspace: runtime data (scaffolded on first run)
+workspace/
 # Test workspaces
 workspace-*
+# Keep example-workspace/ checked in as reference
+!example-workspace/
