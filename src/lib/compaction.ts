@@ -100,6 +100,7 @@ export async function runCompaction(
   messages: SessionMessage[],
   sessionKey: string,
   logger: Logger,
+  options?: { useFallback?: boolean },
 ): Promise<SessionMessage[]> {
   // Find cut point: keep approximately keepRecentTokens worth of recent messages
   let recentTokens = 0;
@@ -127,6 +128,7 @@ export async function runCompaction(
     SUMMARIZATION_SYSTEM_PROMPT,
     [{ role: "user" as const, content: promptText, timestamp: Date.now() }],
     [], // no tools for summarization
+    { useFallback: options?.useFallback },
   );
 
   const summaryText = response.text;
