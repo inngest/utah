@@ -14,6 +14,7 @@ import { ensureWorkspace } from "./lib/session.ts";
 import { setup } from "./setup.ts";
 import { config } from "./config.ts";
 import { logger } from "./lib/logger.ts";
+import { getConfiguredModel, getFallbackModel } from "./lib/llm.ts";
 
 const functions = [
   handleMessage,
@@ -30,10 +31,17 @@ async function main() {
   // Ensure Inngest webhook + Telegram webhook are configured
   await setup();
 
+  // Validate configured models early so we fail fast on misconfiguration
+  getConfiguredModel();
+  const fallback = getFallbackModel();
+
   logger.info(
     {
       agent: config.agent.name,
       model: `${config.llm.provider}/${config.llm.model}`,
+      fallbackModel: fallback
+        ? `${config.llm.fallbackProvider}/${config.llm.fallbackModel}`
+        : undefined,
       workspace: config.workspace.root,
       functions: functions.length,
     },

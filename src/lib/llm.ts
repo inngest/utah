@@ -10,23 +10,28 @@ import type {
   Tool,
   Message,
   AssistantMessage,
-  KnownProvider,
   TextContent,
   ToolCall,
+  KnownProvider,
+  Model,
+  Api,
 } from "@mariozechner/pi-ai";
 import { config } from "../config.ts";
 
 export type { Tool, Message, AssistantMessage, TextContent, ToolCall };
 export { validateToolArguments };
 
-let _model: ReturnType<typeof getModel> | null = null;
+// getModel's generics require literal types from the MODELS registry.
+// Since provider/model come from env vars at runtime, we use a loosened
+// signature that still constrains the provider to KnownProvider.
+const getModelByName = getModel as (provider: KnownProvider, modelId: string) => Model<Api>;
+
+let _model: Model<Api> | null = null;
+let _fallbackModel: Model<Api> | null = null;
 
 export function getConfiguredModel() {
   if (!_model) {
-    // Provider and model come from runtime config (env vars).
-    // getModel's generics require literal types from the MODELS registry,
-    // so we assert here — an invalid combo will throw at runtime.
-    _model = getModel(config.llm.provider as KnownProvider as any, config.llm.model as any);
+    _model = getModelByName(config.llm.provider, config.llm.model);
     if (!_model) {
       throw new Error(
         `Unknown model "${config.llm.model}" for provider "${config.llm.provider}". Check AGENT_MODEL and LLM_PROVIDER env vars.`,
@@ -34,6 +39,19 @@ export function getConfiguredModel() {
     }
   }
   return _model;
+}
+
+export function getFallbackModel(): Model<Api> | null {
+  if (!config.llm.fallbackProvider || !config.llm.fallbackModel) return null;
+  if (!_fallbackModel) {
+    _fallbackModel = getModelByName(config.llm.fallbackProvider, config.llm.fallbackModel);
+    if (!_fallbackModel) {
+      throw new Error(
+        `Unknown fallback model "${config.llm.fallbackModel}" for provider "${config.llm.fallbackProvider}". Check FALLBACK_AGENT_MODEL and FALLBACK_LLM_PROVIDER env vars.`,
+      );
+    }
+  }
+  return _fallbackModel;
 }
 
 export interface LLMResponse {
@@ -45,14 +63,20 @@ export interface LLMResponse {
   toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   usage: AssistantMessage["usage"];
   stopReason: AssistantMessage["stopReason"];
+  /** Which model served this response ("provider/model") */
+  model: string;
 }
 
 export async function callLLM(
   system: string,
   messages: Message[],
   tools: Tool[],
+  options?: { useFallback?: boolean },
 ): Promise<LLMResponse> {
-  const model = getConfiguredModel();
+  const fallback = options?.useFallback ? getFallbackModel() : null;
+  const model = fallback ?? getConfiguredModel();
+  const provider = fallback ? config.llm.fallbackProvider! : config.llm.provider;
+  const modelName = fallback ? config.llm.fallbackModel! : config.llm.model;
 
   const result = await complete(model, {
     systemPrompt: system,
@@ -75,5 +99,6 @@ export async function callLLM(
     toolCalls,
     usage: result.usage,
     stopReason: result.stopReason,
+    model: `${provider}/${modelName}`,
   };
 }

@@ -134,7 +134,8 @@ export function createAgentLoop(
   sessionKey: string,
   options?: AgentLoopOptions,
 ) {
-  return async (step: StepAPI, logger: Logger): Promise<AgentRunResult> => {
+  return async (step: StepAPI, logger: Logger, attempt: number = 0): Promise<AgentRunResult> => {
+    const useFallback = attempt >= 2 && !!config.llm.fallbackProvider;
     const tools = options?.tools ?? TOOLS;
     const loopChannel = options?.channelRouting;
 
@@ -156,7 +157,7 @@ export function createAgentLoop(
     // Compact if conversation is getting too long
     if (shouldCompact(history)) {
       history = await step.run("compact", async () => {
-        return await runCompaction(history, sessionKey, logger);
+        return await runCompaction(history, sessionKey, logger, { useFallback });
       });
     }
 
@@ -207,6 +208,9 @@ export function createAgentLoop(
     let iterations = 0;
     let totalToolCalls = 0;
     let finalResponse = "";
+    let lastModel = useFallback
+      ? `${config.llm.fallbackProvider}/${config.llm.fallbackModel}`
+      : `${config.llm.provider}/${config.llm.model}`;
     let done = false;
     let hasCompactedThisRun = false;
     const emittedTextParts: string[] = [];
@@ -242,7 +246,7 @@ export function createAgentLoop(
       const llmResponse = await step.run(
         "think",
         async ({ systemPrompt: sp }: { systemPrompt: string }) => {
-          return await callLLM(sp, messagesForLLM, tools);
+          return await callLLM(sp, messagesForLLM, tools, { useFallback });
         },
         { systemPrompt },
       );
@@ -293,6 +297,7 @@ export function createAgentLoop(
       }
 
       const toolCalls = llmResponse.toolCalls;
+      lastModel = llmResponse.model;
 
       if (toolCalls.length > 0) {
         // Push the full AssistantMessage from pi-ai (includes provider, api, model,
@@ -462,7 +467,7 @@ export function createAgentLoop(
       response: finalResponse,
       iterations,
       toolCalls: totalToolCalls,
-      model: `${config.llm.provider}/${config.llm.model}`,
+      model: lastModel,
       incrementalRepliesSent: emittedTextParts.length,
     };
   };

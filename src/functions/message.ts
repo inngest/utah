@@ -20,7 +20,7 @@ export const handleMessage = inngest.createFunction(
     triggers: [agentMessageReceived],
     singleton: { key: "event.data.sessionKey", mode: "cancel" },
   },
-  async ({ event, step, logger }) => {
+  async ({ event, step, logger, attempt }) => {
     const {
       message,
       sessionKey = "main",
@@ -38,7 +38,7 @@ export const handleMessage = inngest.createFunction(
     const agentLoop = createAgentLoop(message, sessionKey, {
       channelRouting: destination ? { channel, destination, channelMeta } : undefined,
     });
-    const result = await agentLoop(step, logger);
+    const result = await agentLoop(step, logger, attempt);
 
     // Save the response
     await step.run("save-response", async () => {

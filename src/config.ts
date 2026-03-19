@@ -1,4 +1,5 @@
 import { resolve } from "path";
+import type { KnownProvider } from "@mariozechner/pi-ai";
 
 export const config = {
   agent: {
@@ -14,10 +15,14 @@ export const config = {
 
   llm: {
     // pi-ai provider/model format — supports "anthropic", "openai", "google"
-    provider: (process.env.LLM_PROVIDER || "anthropic") as "anthropic" | "openai" | "google",
+    provider: (process.env.LLM_PROVIDER || "anthropic") as KnownProvider,
     model: process.env.AGENT_MODEL || "claude-sonnet-4-20250514",
     // API keys are read from env by pi-ai automatically:
     //   ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY
+
+    // Optional fallback provider/model — used on later retry attempts if primary fails
+    fallbackProvider: (process.env.FALLBACK_LLM_PROVIDER || undefined) as KnownProvider | undefined,
+    fallbackModel: process.env.FALLBACK_AGENT_MODEL as string | undefined,
   },
 
   loop: {
