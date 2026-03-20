@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .env
+.env.evals
 *.tsbuildinfo
 .DS_Store
 NOTES.md
@@ -10,5 +11,7 @@ workspace/sessions/
 workspace/memory.md
 # Test workspaces
 workspace-*
+# A test workspace for running evals - requires some context
+!workspace-evals
 
 local*.sh
