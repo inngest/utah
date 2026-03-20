@@ -10,3 +10,5 @@ workspace/sessions/
 workspace/memory.md
 # Test workspaces
 workspace-*
+
+local*.sh
