@@ -28,6 +28,8 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { config } from "../config.ts";
 import { appendDailyLog } from "./memory.ts";
 
+const TOOL_TIMEOUT_MS = 60_000;
+
 // --- Pi-coding-agent tools (configured for workspace) ---
 
 // Cast to AgentTool<any>[] — the specific TSchema generics cause contravariance issues
@@ -164,7 +166,15 @@ export async function executeTool(
     // Check if it's a pi-coding-agent tool
     const piTool = piToolMap.get(name);
     if (piTool) {
-      const result = await piTool.execute(toolCallId, args);
+      const result = await Promise.race([
+        piTool.execute(toolCallId, args),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Tool "${name}" timed out after ${TOOL_TIMEOUT_MS / 1000}s`)),
+            TOOL_TIMEOUT_MS,
+          ),
+        ),
+      ]);
 
       // Convert AgentToolResult to our ToolResult format
       const text = result.content
