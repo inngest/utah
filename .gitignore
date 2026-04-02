@@ -15,3 +15,4 @@ workspace-*
 !workspace-evals
 
 local*.sh
+*.plist
