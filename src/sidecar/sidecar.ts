@@ -9,13 +9,14 @@ import { Inngest } from "inngest";
 import { connect, type WorkerConnection } from "inngest/connect";
 import { watch, type FSWatcher } from "node:fs";
 import { readdir, access, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { config } from "../config.js";
 
 // --- Config ---
-
-const FUNCTIONS_DIR = join(config.workspace.root, "functions");
+// Mirror workspace root logic from src/config.ts — we can't import config directly
+// because the sidecar runs with --experimental-strip-types (no .js build output).
+const WORKSPACE_ROOT = resolve(process.env.AGENT_WORKSPACE || "./workspace");
+const FUNCTIONS_DIR = join(WORKSPACE_ROOT, "functions");
 const DEBOUNCE_MS = 2000;
 const HEARTBEAT_CRON = "*/30 * * * *";
 
