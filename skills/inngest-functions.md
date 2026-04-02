@@ -1,3 +1,8 @@
+---
+name: Inngest Functions
+description: How to create dynamic Inngest functions that the sidecar loads automatically.
+---
+
 # Inngest Functions — Sidecar Reference
 
 How to create dynamic Inngest functions that the sidecar loads automatically.
