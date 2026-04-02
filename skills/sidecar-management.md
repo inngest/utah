@@ -14,13 +14,13 @@ The workspace root is configured in `src/config.ts` via `config.workspace.root` 
 1. The sidecar scans `{workspace.root}/functions/` for `.ts` files on startup
 2. Each file must have a **default export** of an `inngest.createFunction()` call
 3. A file watcher detects changes and automatically reconnects with the updated function list (2s debounce)
-4. All functions share the `utah-sidecar` Inngest app ID via the shared client
+4. All functions share the `utah-sidecar` Inngest app ID via the shared client (`src/sidecar/client.ts`)
 
 ## Writing a Function
 
 Read the **Inngest Functions** skill (`skills/inngest-functions.md`) for the full function template, file conventions, trigger types, step API reference, and common patterns.
 
-Key difference for sidecar functions: the import path for the client depends on where the workspace is configured. If using the default workspace (`./workspace`), import from `../../src/sidecar/client.js`. The relative path differs because sidecar functions live in `{workspace.root}/functions/`.
+Key difference for sidecar functions: the import path for the client depends on where the workspace is configured. If using the default workspace (`./workspace`), import from `../../src/sidecar/client.ts`. The relative path differs because sidecar functions live in `{workspace.root}/functions/`.
 
 ## File Operations
 

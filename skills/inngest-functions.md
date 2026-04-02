@@ -11,7 +11,7 @@ How to create dynamic Inngest functions that the sidecar loads automatically.
 
 - **One function per file** in the `{workspace.root}/functions/` directory (workspace root is configured in `src/config.ts`)
 - **Default export** — each file must `export default` an Inngest function
-- **Import the shared client** from `./client.js` (not `./client.ts`)
+- **Import the shared client** from `../../src/sidecar/client.ts`
 - **`_`-prefixed files are ignored** — use them for helpers (e.g. `_utils.ts`)
 - **`client.ts` is ignored** — it's the shared client, not a function
 - **No top-level side effects** — the file may be re-imported on changes
@@ -20,7 +20,7 @@ How to create dynamic Inngest functions that the sidecar loads automatically.
 ## Basic Template
 
 ```typescript
-import { inngest } from "./client.js";
+import { inngest } from "../../src/sidecar/client.ts";
 
 export default inngest.createFunction(
   { id: "my-function", name: "My Function", triggers: [{ event: "app/my-event" }] },
@@ -145,7 +145,7 @@ sidecar/health.check
 ### Cron Job
 
 ```typescript
-import { inngest } from "./client.js";
+import { inngest } from "../../src/sidecar/client.ts";
 
 export default inngest.createFunction(
   {
@@ -166,7 +166,7 @@ export default inngest.createFunction(
 ### Event Handler
 
 ```typescript
-import { inngest } from "./client.js";
+import { inngest } from "../../src/sidecar/client.ts";
 
 export default inngest.createFunction(
   { id: "handle-webhook", name: "Handle Webhook", triggers: [{ event: "app/webhook.received" }] },
@@ -182,7 +182,7 @@ export default inngest.createFunction(
 ### Multi-Step Workflow
 
 ```typescript
-import { inngest } from "./client.js";
+import { inngest } from "../../src/sidecar/client.ts";
 
 export default inngest.createFunction(
   { id: "onboarding-flow", name: "Onboarding Flow", triggers: [{ event: "app/user.signed-up" }] },
@@ -215,7 +215,7 @@ export default inngest.createFunction(
 ### Notify the Main Agent
 
 ```typescript
-import { inngest } from "./client.js";
+import { inngest } from "../../src/sidecar/client.ts";
 
 export default inngest.createFunction(
   { id: "monitor-something", name: "Monitor Something", triggers: [{ cron: "*/15 * * * *" }] },

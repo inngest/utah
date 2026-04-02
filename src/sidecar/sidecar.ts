@@ -5,12 +5,12 @@
  * Watches for file changes and reconnects with updated function list.
  */
 
-import { Inngest } from "inngest";
 import { connect, type WorkerConnection } from "inngest/connect";
 import { watch, type FSWatcher } from "node:fs";
 import { readdir, access, mkdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { inngest as sidecarClient } from "./client";
 
 // --- Config ---
 // Mirror workspace root logic from src/config.ts — we can't import config directly
@@ -31,10 +31,6 @@ function log(level: string, msg: string, data?: Record<string, unknown>) {
   };
   console.log(JSON.stringify(entry));
 }
-
-// --- Inngest client for sidecar-internal functions ---
-
-const sidecarClient = new Inngest({ id: "utah-sidecar" });
 
 // --- Function loading ---
 
