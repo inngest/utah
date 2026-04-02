@@ -5,11 +5,13 @@ description: How to create, update, and manage dynamic Inngest functions in the 
 
 # Sidecar Management
 
-The sidecar is a separate process that dynamically loads Inngest functions from `workspace/functions/` and connects them to Inngest via WebSocket. Use it to add scheduled automations, event-driven handlers, and multi-step workflows without modifying the core agent.
+The sidecar is a separate process that dynamically loads Inngest functions from a `functions/` subdirectory within the configured workspace and connects them to Inngest via WebSocket. Use it to add scheduled automations, event-driven handlers, and multi-step workflows without modifying the core agent.
+
+The workspace root is configured in `src/config.ts` via `config.workspace.root` (env var `AGENT_WORKSPACE`, defaults to `./workspace`). Functions live at `{workspace.root}/functions/`.
 
 ## How It Works
 
-1. The sidecar scans `workspace/functions/` for `.ts` files on startup
+1. The sidecar scans `{workspace.root}/functions/` for `.ts` files on startup
 2. Each file must have a **default export** of an `inngest.createFunction()` call
 3. A file watcher detects changes and automatically reconnects with the updated function list (2s debounce)
 4. All functions share the `utah-sidecar` Inngest app ID via the shared client
@@ -18,17 +20,19 @@ The sidecar is a separate process that dynamically loads Inngest functions from 
 
 Read the **Inngest Functions** skill (`skills/inngest-functions.md`) for the full function template, file conventions, trigger types, step API reference, and common patterns.
 
-Key difference for sidecar functions: import the client from `../../src/sidecar/client.js` (not `./client.js` as shown in the skill template — the relative path differs because sidecar functions live in `workspace/functions/`).
+Key difference for sidecar functions: the import path for the client depends on where the workspace is configured. If using the default workspace (`./workspace`), import from `../../src/sidecar/client.js`. The relative path differs because sidecar functions live in `{workspace.root}/functions/`.
 
 ## File Operations
 
 ### Creating a new function
 
-Use the `write` tool to create a file in `workspace/functions/`:
+Use the `write` tool to create a file in the workspace functions directory (`{workspace.root}/functions/`):
 
 ```
-write workspace/functions/my-function.ts <content>
+write {workspace.root}/functions/my-function.ts <content>
 ```
+
+Check `src/config.ts` for the resolved workspace root path.
 
 The sidecar's file watcher will detect the new file and reconnect automatically within 2 seconds.
 
@@ -41,7 +45,7 @@ Use the `edit` tool to modify the file. The file watcher triggers a reconnect on
 Use `bash` to remove the file:
 
 ```
-rm workspace/functions/my-function.ts
+rm {workspace.root}/functions/my-function.ts
 ```
 
 The sidecar reconnects without the deleted function.
@@ -49,14 +53,14 @@ The sidecar reconnects without the deleted function.
 ### Listing active functions
 
 ```
-ls workspace/functions/
+ls {workspace.root}/functions/
 ```
 
 All `.ts` files (except `_`-prefixed and `client.ts`) are loaded as functions.
 
 ## No Manual Restart Needed
 
-The sidecar watches `workspace/functions/` and reconnects automatically when files change. You do not need to restart the sidecar process after writing, editing, or deleting function files.
+The sidecar watches `{workspace.root}/functions/` and reconnects automatically when files change. You do not need to restart the sidecar process after writing, editing, or deleting function files.
 
 If the sidecar is not running, it can be started with:
 

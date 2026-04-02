@@ -9,12 +9,13 @@ import { Inngest } from "inngest";
 import { connect, type WorkerConnection } from "inngest/connect";
 import { watch, type FSWatcher } from "node:fs";
 import { readdir, access, mkdir } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { config } from "../config.js";
 
 // --- Config ---
 
-const FUNCTIONS_DIR = resolve(import.meta.dirname ?? ".", "../../workspace/functions");
+const FUNCTIONS_DIR = join(config.workspace.root, "functions");
 const DEBOUNCE_MS = 2000;
 const HEARTBEAT_CRON = "*/30 * * * *";
 

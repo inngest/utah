@@ -9,7 +9,7 @@ How to create dynamic Inngest functions that the sidecar loads automatically.
 
 ## File Conventions
 
-- **One function per file** in the `functions/` directory
+- **One function per file** in the `{workspace.root}/functions/` directory (workspace root is configured in `src/config.ts`)
 - **Default export** — each file must `export default` an Inngest function
 - **Import the shared client** from `./client.js` (not `./client.ts`)
 - **`_`-prefixed files are ignored** — use them for helpers (e.g. `_utils.ts`)
