@@ -11,8 +11,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "eval": "AGENT_WORKSPACE=./workspace-evals node --env-file=.env.evals --experimental-strip-types --experimental-transform-types --no-warnings evals/delegation.ts",
-    "sidecar": "node --env-file=.env --experimental-strip-types --experimental-transform-types --no-warnings src/sidecar.ts",
-    "sidecar:dev": "INNGEST_DEV=1 node --watch --env-file=.env --experimental-strip-types --experimental-transform-types --no-warnings src/sidecar.ts",
+    "sidecar": "node --env-file=.env --experimental-strip-types --experimental-transform-types --no-warnings src/sidecar/sidecar.ts",
+    "sidecar:dev": "INNGEST_DEV=1 node --watch --env-file=.env --experimental-strip-types --experimental-transform-types --no-warnings src/sidecar/sidecar.ts",
     "prepare": "husky"
   },
   "dependencies": {

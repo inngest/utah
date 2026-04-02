@@ -1,5 +1,5 @@
 /**
- * Sidecar — dynamically loads Inngest functions from the functions/ directory
+ * Sidecar — dynamically loads Inngest functions from the workspace/functions/ directory
  * and connects them to Inngest Cloud via WebSocket.
  *
  * Watches for file changes and reconnects with updated function list.
@@ -14,7 +14,7 @@ import { pathToFileURL } from "node:url";
 
 // --- Config ---
 
-const FUNCTIONS_DIR = resolve(import.meta.dirname ?? ".", "../functions");
+const FUNCTIONS_DIR = resolve(import.meta.dirname ?? ".", "../../workspace/functions");
 const DEBOUNCE_MS = 2000;
 const HEARTBEAT_CRON = "*/30 * * * *";
 
