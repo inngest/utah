@@ -18,8 +18,7 @@ How to create dynamic Inngest functions that the sidecar loads automatically.
 import { inngest } from "./client.js";
 
 export default inngest.createFunction(
-  { id: "my-function", name: "My Function" },
-  { event: "app/my-event" }, // or { cron: "..." }
+  { id: "my-function", name: "My Function", triggers: [{ event: "app/my-event" }] },
   async ({ event, step }) => {
     // function body
   },
@@ -28,23 +27,25 @@ export default inngest.createFunction(
 
 ## Trigger Types
 
+Triggers are defined in the `triggers` array within the function options object. You can specify one or multiple triggers.
+
 ### Cron Trigger
 
 ```typescript
 {
-  cron: "0 */6 * * *";
+  triggers: [{ cron: "0 */6 * * *" }];
 } // Every 6 hours
 {
-  cron: "*/30 * * * *";
+  triggers: [{ cron: "*/30 * * * *" }];
 } // Every 30 minutes
 {
-  cron: "0 9 * * 1-5";
+  triggers: [{ cron: "0 9 * * 1-5" }];
 } // Weekdays at 9am UTC
 {
-  cron: "TZ=America/Detroit 0 9 * * *";
+  triggers: [{ cron: "TZ=America/Detroit 0 9 * * *" }];
 } // 9am Eastern
 {
-  cron: "TZ=America/Detroit 0 18 * * 1-5";
+  triggers: [{ cron: "TZ=America/Detroit 0 18 * * 1-5" }];
 } // 6pm ET weekdays
 ```
 
@@ -52,11 +53,19 @@ export default inngest.createFunction(
 
 ```typescript
 {
-  event: "app/user.created";
+  triggers: [{ event: "app/user.created" }];
 } // Single event
 {
-  event: "app/order.completed";
+  triggers: [{ event: "app/order.completed" }];
 } // Any custom event name
+```
+
+### Multiple Triggers
+
+```typescript
+{
+  triggers: [{ event: "app/user.created" }, { event: "app/user.imported" }];
+}
 ```
 
 ## Step API Quick Reference
@@ -134,8 +143,11 @@ sidecar/health.check
 import { inngest } from "./client.js";
 
 export default inngest.createFunction(
-  { id: "daily-cleanup", name: "Daily Cleanup" },
-  { cron: "TZ=America/Detroit 0 3 * * *" }, // 3am ET daily
+  {
+    id: "daily-cleanup",
+    name: "Daily Cleanup",
+    triggers: [{ cron: "TZ=America/Detroit 0 3 * * *" }],
+  },
   async ({ step }) => {
     const result = await step.run("cleanup", async () => {
       // do cleanup work
@@ -152,8 +164,7 @@ export default inngest.createFunction(
 import { inngest } from "./client.js";
 
 export default inngest.createFunction(
-  { id: "handle-webhook", name: "Handle Webhook" },
-  { event: "app/webhook.received" },
+  { id: "handle-webhook", name: "Handle Webhook", triggers: [{ event: "app/webhook.received" }] },
   async ({ event, step }) => {
     const processed = await step.run("process", async () => {
       return { webhookId: event.data.id, status: "processed" };
@@ -169,8 +180,7 @@ export default inngest.createFunction(
 import { inngest } from "./client.js";
 
 export default inngest.createFunction(
-  { id: "onboarding-flow", name: "Onboarding Flow" },
-  { event: "app/user.signed-up" },
+  { id: "onboarding-flow", name: "Onboarding Flow", triggers: [{ event: "app/user.signed-up" }] },
   async ({ event, step }) => {
     await step.run("send-welcome", async () => {
       // send welcome email
@@ -203,8 +213,7 @@ export default inngest.createFunction(
 import { inngest } from "./client.js";
 
 export default inngest.createFunction(
-  { id: "monitor-something", name: "Monitor Something" },
-  { cron: "*/15 * * * *" },
+  { id: "monitor-something", name: "Monitor Something", triggers: [{ cron: "*/15 * * * *" }] },
   async ({ step }) => {
     const result = await step.run("check", async () => {
       // check something
