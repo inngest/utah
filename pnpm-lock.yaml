@@ -21,8 +21,8 @@ importers:
         specifier: ^0.34.0
         version: 0.34.48
       inngest:
-        specifier: 4.0.0-alpha.6
-        version: 4.0.0-alpha.6(@opentelemetry/core@2.5.1(@opentelemetry/api@1.9.0))(express@5.2.1)(typescript@5.9.3)(zod@4.3.6)
+        specifier: 4.1.1
+        version: 4.1.1(@opentelemetry/core@2.5.1(@opentelemetry/api@1.9.0))(express@5.2.1)(typescript@5.9.3)(zod@4.3.6)
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -1583,8 +1583,8 @@ packages:
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
 
-  inngest@4.0.0-alpha.6:
-    resolution: {integrity: sha512-YzYaApHjWtfeqPkEHlJlinbsBmCZLvaYPZuFytB5vPi7EXDF1QfNPoS0fVJtMYDN6ud4eVvTDH7w0AFX+jSv3A==}
+  inngest@4.1.1:
+    resolution: {integrity: sha512-/9rmafMBeRZhfOr3HWZhzQLIxzAYnMeYLxPZb096w7OZz4h3UEyBWIu5uiwsXgM9sm82uyGaiLE4pAxy0QF2wQ==}
     engines: {node: '>=20'}
     peerDependencies:
       '@sveltejs/kit': '>=1.27.3'
@@ -1596,6 +1596,7 @@ packages:
       hono: '>=4.2.7'
       koa: '>=2.14.2'
       next: '>=12.0.0'
+      react: '>=18.0.0'
       typescript: '>=5.8.0'
       zod: ^3.25.0 || ^4.0.0
     peerDependenciesMeta:
@@ -1616,6 +1617,8 @@ packages:
       koa:
         optional: true
       next:
+        optional: true
+      react:
         optional: true
       typescript:
         optional: true
@@ -4640,7 +4643,7 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  inngest@4.0.0-alpha.6(@opentelemetry/core@2.5.1(@opentelemetry/api@1.9.0))(express@5.2.1)(typescript@5.9.3)(zod@4.3.6):
+  inngest@4.1.1(@opentelemetry/core@2.5.1(@opentelemetry/api@1.9.0))(express@5.2.1)(typescript@5.9.3)(zod@4.3.6):
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       '@inngest/ai': 0.1.7
