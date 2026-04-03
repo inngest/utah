@@ -10,7 +10,7 @@ import { watch, type FSWatcher } from "node:fs";
 import { readdir, access, mkdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { inngest as sidecarClient } from "./client";
+import { inngest as sidecarClient } from "./client.ts";
 
 // --- Config ---
 // Mirror workspace root logic from src/config.ts — we can't import config directly
