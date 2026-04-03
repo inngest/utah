@@ -238,3 +238,76 @@ export default inngest.createFunction(
   },
 );
 ```
+
+## Best Practices
+
+### Use the Logger
+
+Every sidecar function receives a `logger` via the function context. **Use it.** When something goes wrong, logs are the only way to debug sidecar functions. The logger is a [pino](https://github.com/pinojs/pino) instance configured in `src/lib/logger.ts`.
+
+```typescript
+export default inngest.createFunction(
+  { id: "my-function", triggers: [{ cron: "0 9 * * *" }] },
+  async ({ step, logger }) => {
+    const result = await step.run("do-work", async () => {
+      logger.info("Starting work...");
+      // ...
+      logger.info({ resultCount: items.length }, "Work completed");
+      return items;
+    });
+  },
+);
+```
+
+Log structured data as the first argument and a message as the second — pino style:
+
+```typescript
+logger.info({ exitCode: 0, outputLen: 512 }, "script-finished");
+logger.warn({ err }, "Failed to parse JSON — using fallback");
+```
+
+### Shell Scripts — Use `spawnSync`, Not `execSync`
+
+When running shell scripts, **always use `spawnSync`** from `child_process`. It captures stdout and stderr separately, gives you the exit code, and doesn't throw on non-zero exit.
+
+`execSync` only captures stdout — if the script writes to stderr (common for formatted output, progress, errors), that output goes straight to the sidecar error log and you'll never see it.
+
+```typescript
+const { spawnSync } = await import("child_process");
+const proc = spawnSync("./workspace-utah/scripts/my-script.sh", ["--flag"], {
+  encoding: "utf-8",
+  timeout: 120_000,
+  cwd: process.cwd(),
+  env: { ...process.env, PATH: FULL_PATH },
+});
+
+logger.info(
+  { exitCode: proc.status, stdoutLen: proc.stdout?.length, stderrLen: proc.stderr?.length },
+  "script-result",
+);
+
+if (proc.status !== 0) {
+  throw new Error(`Script failed (exit ${proc.status}): ${proc.stderr}`);
+}
+```
+
+### PATH for External CLIs
+
+The sidecar runs via launchd, which has a **minimal PATH** — your shell profile (`~/.zshrc`, etc.) is not sourced. If your function calls external CLIs (like `gws`, `gh`, etc.), you must explicitly add their directories to PATH:
+
+```typescript
+const AGENT_BIN = `${process.env.HOME}/.pi/agent/bin`;
+const FULL_PATH = [AGENT_BIN, process.env.PATH].join(":");
+
+// Then pass it to spawnSync:
+const proc = spawnSync(script, args, {
+  env: { ...process.env, PATH: FULL_PATH },
+  // ...
+});
+```
+
+Without this, the script will silently fail to find the CLI — especially dangerous if errors are swallowed with `|| true` in shell scripts.
+
+### No `enum` or `namespace`
+
+TypeScript `enum` and `namespace` are not supported because the sidecar uses `--experimental-strip-types`. Use `as const` objects or union types instead.

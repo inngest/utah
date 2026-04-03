@@ -20,6 +20,8 @@ The workspace root is configured in `src/config.ts` via `config.workspace.root` 
 
 Read the **Inngest Functions** skill (`skills/inngest-functions.md`) for the full function template, file conventions, trigger types, step API reference, and common patterns.
 
+Pay special attention to the **Best Practices** section — it covers logging, running shell scripts, and PATH issues that are common pitfalls in the sidecar environment.
+
 Key difference for sidecar functions: the import path for the client depends on where the workspace is configured. If using the default workspace (`./workspace`), import from `../../src/sidecar/client.ts`. The relative path differs because sidecar functions live in `{workspace.root}/functions/`.
 
 ## File Operations
