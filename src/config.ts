@@ -6,6 +6,10 @@ export const config = {
     name: process.env.AGENT_NAME || "Utah",
   },
 
+  skills: {
+    dir: resolve(process.env.SKILLS_DIR || "./skills"),
+  },
+
   workspace: {
     root: resolve(process.env.AGENT_WORKSPACE || "./workspace"),
     sessionDir: "sessions",

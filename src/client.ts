@@ -42,7 +42,7 @@ export const agentSubagentSpawn = eventType("agent.subagent.spawn", {
 });
 
 export const inngest = new Inngest({
-  id: "ai-agent",
+  id: "utah-agent",
   checkpointing: true,
   middleware: [extendedTraces],
   logger,

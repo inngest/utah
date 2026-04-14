@@ -10,6 +10,7 @@ import { readFile } from "fs/promises";
 import { resolve } from "path";
 import { config } from "../config.ts";
 import { buildMemoryContext } from "./memory.ts";
+import { loadSkillIndex } from "./skills.ts";
 import { loadSession, type SessionMessage } from "./session.ts";
 
 /**
@@ -59,6 +60,15 @@ export async function buildSystemPrompt(): Promise<string> {
 
   // Memory
   parts.push(`## Memory\n${memory}`);
+
+  // Skills
+  const skills = loadSkillIndex();
+  if (skills.length > 0) {
+    const lines = skills.map((s) => `- **${s.name}** — ${s.description} (\`${s.filePath}\`)`);
+    parts.push(
+      `## Skills\nReference documents available via the \`read\` tool:\n${lines.join("\n")}`,
+    );
+  }
 
   // Guidelines
   parts.push(`## Tools & Guidelines
