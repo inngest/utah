@@ -16,11 +16,11 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@mariozechner/pi-agent-core": "^0.60.0",
-    "@mariozechner/pi-ai": "^0.60.0",
-    "@mariozechner/pi-coding-agent": "^0.60.0",
+    "@mariozechner/pi-agent-core": "^0.73.1",
+    "@mariozechner/pi-ai": "^0.73.1",
+    "@mariozechner/pi-coding-agent": "^0.73.1",
     "@sinclair/typebox": "^0.34.0",
-    "inngest": "4.1.1",
+    "inngest": "4.4.0",
     "pino": "^10.3.1"
   },
   "devDependencies": {
