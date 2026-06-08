@@ -21,6 +21,7 @@ import { getSubscriptionToken, subscribe } from "inngest/realtime";
 import { inngest } from "./client.ts";
 import { tuiChannel, TUI_TOPICS, type TuiReply, type TuiStatus } from "../channels/tui/channel.ts";
 import { Tui } from "./ui.ts";
+import { log, LOG_PATH } from "./log.ts";
 import {
   createSession,
   getSession,
@@ -31,10 +32,9 @@ import {
   type SessionMeta,
 } from "./state.ts";
 
-/** Minimal handle returned by a callback-style subscription. */
-interface Subscription {
+/** A realtime stream handle (the ReadableStream form, with a close()). */
+interface StreamHandle extends ReadableStream<RealtimeMessage> {
   close(reason?: string): void;
-  unsubscribe(reason?: string): void;
 }
 
 /** Loose shape for realtime frames — wide enough for all of our topics. */
@@ -45,11 +45,16 @@ interface RealtimeMessage {
 }
 
 const username = os.userInfo().username || "you";
+const RECONNECT_DELAY_MS = 1000;
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class App {
   private tui: Tui;
   private session!: SessionMeta;
-  private subscription: Subscription | null = null;
+  private stream: StreamHandle | null = null;
+  /** Bumped to invalidate the running subscribe loop (e.g. on /clear or exit). */
+  private subGen = 0;
   private stopped = false;
 
   constructor() {
@@ -73,36 +78,61 @@ export class App {
       "system",
       `Connected to session ${this.session.id}. Type a message, or /help for commands.`,
     );
+    log("tui started", { session: this.session.id, logPath: LOG_PATH });
 
-    await this.subscribeToSession();
+    // Long-running loop — don't await it.
+    void this.subscribeLoop(this.session.id, ++this.subGen);
   }
 
   // --- realtime ---
 
-  private async subscribeToSession(): Promise<void> {
-    try {
-      // Per the requested flow: use credentials to mint a short-lived
-      // subscription token, then open the realtime stream with it.
-      const token = await getSubscriptionToken(inngest, {
-        channel: tuiChannel(this.session.id),
-        topics: [...TUI_TOPICS],
-      });
+  /**
+   * Subscribe and keep the stream alive. The Inngest realtime client does not
+   * reconnect on its own: when the WebSocket drops (e.g. an idle connection is
+   * closed by the gateway while the agent runs tools), the stream simply ends.
+   * We detect that and re-subscribe, so a later reply isn't lost forever.
+   *
+   * `gen` guards against stale loops: /clear and exit bump `subGen`, which
+   * makes any older loop stop after its current read.
+   */
+  private async subscribeLoop(sessionId: string, gen: number): Promise<void> {
+    while (!this.stopped && gen === this.subGen) {
+      try {
+        // Per the requested flow: mint a short-lived subscription token from
+        // our credentials, then open the realtime stream with it.
+        const token = await getSubscriptionToken(inngest, {
+          channel: tuiChannel(sessionId),
+          topics: [...TUI_TOPICS],
+        });
+        const stream = (await subscribe({ app: inngest, ...token })) as StreamHandle;
+        this.stream = stream;
+        log("subscribed", { session: sessionId, gen });
 
-      this.subscription = await subscribe({
-        app: inngest,
-        ...token,
-        onMessage: (message: RealtimeMessage) => this.onRealtime(message),
-      });
-    } catch (err) {
-      this.tui.addMessage(
-        "system",
-        `⚠ Realtime subscription failed: ${err instanceof Error ? err.message : String(err)}. ` +
-          `Replies won't stream in. Check INNGEST keys / dev server.`,
-      );
+        const reader = stream.getReader();
+        try {
+          while (gen === this.subGen) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            this.onRealtime(value);
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        log("subscription stream ended", { session: sessionId, gen });
+      } catch (err) {
+        log("subscription error", { session: sessionId, gen, error: String(err) });
+      }
+
+      if (this.stopped || gen !== this.subGen) break;
+      // Reconnect. Messages published while we were disconnected are lost —
+      // realtime has no replay — but future replies will come through.
+      await delay(RECONNECT_DELAY_MS);
+      log("reconnecting subscription", { session: sessionId, gen });
     }
   }
 
   private onRealtime(message: RealtimeMessage): void {
+    log("realtime message", { topic: message.topic, kind: message.kind });
     if (message.kind && message.kind !== "data") return; // ignore run lifecycle frames
     if (message.topic === "reply") {
       const reply = message.data as TuiReply;
@@ -117,16 +147,21 @@ export class App {
     }
   }
 
-  private async resubscribe(): Promise<void> {
-    if (this.subscription) {
+  private closeStream(): void {
+    if (this.stream) {
       try {
-        this.subscription.close();
+        this.stream.close();
       } catch {
         /* best-effort */
       }
-      this.subscription = null;
+      this.stream = null;
     }
-    await this.subscribeToSession();
+  }
+
+  private async resubscribe(): Promise<void> {
+    this.subGen++; // invalidate the current loop
+    this.closeStream(); // unblock its reader so it exits promptly
+    void this.subscribeLoop(this.session.id, this.subGen);
   }
 
   // --- input handling ---
@@ -140,7 +175,7 @@ export class App {
     void touchSession(this.session.id, line);
 
     try {
-      await inngest.send({
+      const { ids } = await inngest.send({
         name: "agent.message.received",
         data: {
           message: line,
@@ -151,7 +186,9 @@ export class App {
           channelMeta: {},
         },
       });
+      log("sent message", { session: this.session.id, eventIds: ids });
     } catch (err) {
+      log("send failed", { session: this.session.id, error: String(err) });
       this.tui.setThinking(false);
       this.tui.addMessage(
         "system",
@@ -220,13 +257,9 @@ export class App {
   private shutdown(): void {
     if (this.stopped) return;
     this.stopped = true;
-    if (this.subscription) {
-      try {
-        this.subscription.close();
-      } catch {
-        /* best-effort */
-      }
-    }
+    this.subGen++; // stop the subscribe loop
+    this.closeStream();
+    log("tui shutdown", { session: this.session?.id });
     this.tui.stop();
     process.exit(0);
   }

@@ -11,6 +11,7 @@
  */
 
 import readline from "node:readline";
+import { renderMarkdown } from "./markdown.ts";
 
 // --- ANSI helpers ---
 const ESC = "\x1b[";
@@ -32,6 +33,8 @@ export type Role = "user" | "assistant" | "system";
 export interface UiMessage {
   role: Role;
   content: string;
+  /** Cached rendered body lines — invalidated when content or width changes. */
+  cache?: { width: number; content: string; lines: string[] };
 }
 
 export interface TuiCallbacks {
@@ -67,6 +70,7 @@ export class Tui {
   private input = "";
   private cursor = 0;
   private thinking = false;
+  private thinkingSince = 0;
   private spinnerFrame = 0;
   private spinnerTimer: ReturnType<typeof setInterval> | null = null;
   private scrollOffset = 0; // lines scrolled up from the bottom; 0 = pinned
@@ -118,11 +122,15 @@ export class Tui {
 
   /** Append text to the trailing assistant message, or start one. */
   appendAssistant(content: string): void {
+    // Chunks from the model often carry leading/trailing newlines; rendering
+    // those verbatim shows blank lines under the label, so normalize them.
+    const text = content.trim();
+    if (!text) return;
     const last = this.messages[this.messages.length - 1];
     if (last && last.role === "assistant") {
-      last.content += (last.content ? "\n\n" : "") + content;
+      last.content += "\n\n" + text;
     } else {
-      this.messages.push({ role: "assistant", content });
+      this.messages.push({ role: "assistant", content: text });
     }
     this.scrollOffset = 0;
     this.render();
@@ -138,6 +146,7 @@ export class Tui {
     if (thinking === this.thinking) return;
     this.thinking = thinking;
     if (thinking) {
+      this.thinkingSince = Date.now();
       this.spinnerTimer = setInterval(() => {
         this.spinnerFrame = (this.spinnerFrame + 1) % SPINNER.length;
         this.render();
@@ -287,8 +296,8 @@ export class Tui {
     const lines: string[] = [];
     for (const msg of this.messages) {
       lines.push(this.label(msg.role));
-      for (const wrapped of wrap(msg.content, contentWidth - 2)) {
-        lines.push("  " + this.colorBody(msg.role, wrapped));
+      for (const bodyLine of this.renderBody(msg, contentWidth - 2)) {
+        lines.push("  " + bodyLine);
       }
       lines.push("");
     }
@@ -331,10 +340,24 @@ export class Tui {
     }
   }
 
-  private colorBody(role: Role, text: string): string {
-    if (role === "system") return `${YELLOW}${text}${RESET}`;
-    if (role === "user") return text;
-    return text; // assistant: default fg
+  /**
+   * Render a message body to wrapped lines, cached per (content, width).
+   * Assistant text is rendered as markdown; user/system stay plain.
+   */
+  private renderBody(msg: UiMessage, width: number): string[] {
+    if (msg.cache && msg.cache.width === width && msg.cache.content === msg.content) {
+      return msg.cache.lines;
+    }
+    let lines: string[];
+    if (msg.role === "assistant") {
+      lines = renderMarkdown(msg.content, width);
+    } else if (msg.role === "system") {
+      lines = wrap(msg.content, width).map((l) => `${YELLOW}${l}${RESET}`);
+    } else {
+      lines = wrap(msg.content, width); // user: plain
+    }
+    msg.cache = { width, content: msg.content, lines };
+    return lines;
   }
 
   private statusLine(cols: number): string {
@@ -342,7 +365,12 @@ export class Tui {
       return this.truncate(`${MAGENTA}${this.statusHint}${RESET}`, cols);
     }
     if (this.thinking) {
-      return this.truncate(`${CYAN}${SPINNER[this.spinnerFrame]} thinking…${RESET}`, cols);
+      const secs = Math.floor((Date.now() - this.thinkingSince) / 1000);
+      const elapsed = secs > 0 ? ` ${secs}s` : "";
+      return this.truncate(
+        `${CYAN}${SPINNER[this.spinnerFrame]} thinking…${elapsed}${RESET}`,
+        cols,
+      );
     }
     const hint = this.scrollOffset > 0 ? "↑ scrolled — PgDn to return" : "/help for commands";
     return this.truncate(`${DIM}${hint}${RESET}`, cols);

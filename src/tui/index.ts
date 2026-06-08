@@ -11,6 +11,7 @@
 
 import { App } from "./app.ts";
 import { listSessions } from "./state.ts";
+import { installConsoleCapture } from "./log.ts";
 
 async function main() {
   if (!process.stdin.isTTY) {
@@ -24,6 +25,9 @@ async function main() {
     // Resume an explicitly named session, else the most recent one.
     sessionId = args.find((a) => !a.startsWith("-")) ?? (await listSessions())[0]?.id;
   }
+
+  // Route console.* to the log file so SDK output can't corrupt the UI.
+  installConsoleCapture();
 
   const app = new App();
   await app.start(sessionId);

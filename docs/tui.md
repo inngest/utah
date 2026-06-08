@@ -64,3 +64,25 @@ so each window's realtime stream only carries its own replies.
 - `Ctrl+C` — clear the input (press again on an empty line to exit)
 - `Ctrl+L` — redraw · `Ctrl+U` — clear line
 - `↑` / `↓` — input history · `PgUp` / `PgDn` — scroll the transcript
+
+## Troubleshooting
+
+The TUI owns the terminal, so it logs to a file instead of stdout. Watch it:
+
+```bash
+tail -f ~/.inngest-agent/tui.log
+```
+
+Each line is JSON: subscription connects/reconnects, every realtime message
+(`topic`/`kind`), sent event ids, and any errors (including captured
+`console.*` output from the Inngest SDK).
+
+**Stuck on "thinking…" and the reply never appears.** The Inngest realtime
+client does not reconnect or send keepalives on its own, so an idle WebSocket
+can be dropped by the gateway while the agent runs tools. The TUI now
+re-subscribes automatically when the stream ends — but realtime has no replay,
+so a reply published _during_ the disconnected window is lost. The log will
+show `subscription stream ended` / `reconnecting subscription` around the gap.
+The thinking indicator shows elapsed seconds (`thinking… 45s`) so a stall is
+visible. For the raw SDK view, run with `DEBUG=inngest:realtime` (note: that
+prints to stderr and will fight with the UI).
