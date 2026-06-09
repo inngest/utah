@@ -313,7 +313,9 @@ export function createAgentLoop(
               response: llmResponse.text,
               channel: loopChannel.channel,
               destination: loopChannel.destination,
-              channelMeta: loopChannel.channelMeta,
+              // Tag as incremental so realtime channels (e.g. TUI) can render
+              // it as in-progress text rather than the final answer.
+              channelMeta: { ...loopChannel.channelMeta, incremental: true },
             },
           });
           // Track emitted text so we can exclude it from the final response
