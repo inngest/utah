@@ -15,6 +15,7 @@ export const config = {
     sessionDir: "sessions",
     memoryFile: "MEMORY.md",
     memoryDir: "memory",
+    skillsDir: "skills",
   },
 
   llm: {

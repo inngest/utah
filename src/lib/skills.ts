@@ -11,6 +11,7 @@ export interface SkillEntry {
   name: string;
   description: string;
   filePath: string;
+  source?: "project" | "workspace";
 }
 
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---/;
@@ -29,8 +30,13 @@ function parseFrontmatter(content: string): Record<string, string> {
   return fields;
 }
 
-export function loadSkillIndex(): SkillEntry[] {
-  const dir = config.skills.dir;
+/**
+ * Load skill entries from a single directory.
+ */
+function loadSkillsFromDir(
+  dir: string,
+  source: "project" | "workspace",
+): SkillEntry[] {
   let files: string[];
   try {
     files = readdirSync(dir);
@@ -50,6 +56,7 @@ export function loadSkillIndex(): SkillEntry[] {
           name: fm.name,
           description: fm.description,
           filePath: relative(process.cwd(), fullPath),
+          source,
         });
       }
     } catch {
@@ -57,5 +64,29 @@ export function loadSkillIndex(): SkillEntry[] {
     }
   }
 
-  return skills.sort((a, b) => a.name.localeCompare(b.name));
+  return skills;
+}
+
+/**
+ * Load skills from both the project-wide and workspace-level skill directories.
+ * Workspace skills override project-wide skills when they share the same filename.
+ */
+export function loadSkillIndex(): SkillEntry[] {
+  const projectSkills = loadSkillsFromDir(config.skills.dir, "project");
+
+  const workspaceSkillsDir = resolve(config.workspace.root, config.workspace.skillsDir);
+  const workspaceSkills = loadSkillsFromDir(workspaceSkillsDir, "workspace");
+
+  // Build a map keyed by filename — workspace skills override project skills
+  const skillMap = new Map<string, SkillEntry>();
+  for (const skill of projectSkills) {
+    const key = basename(skill.filePath);
+    skillMap.set(key, skill);
+  }
+  for (const skill of workspaceSkills) {
+    const key = basename(skill.filePath);
+    skillMap.set(key, skill);
+  }
+
+  return Array.from(skillMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
