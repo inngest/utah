@@ -66,7 +66,7 @@ export async function buildSystemPrompt(): Promise<string> {
   if (skills.length > 0) {
     const lines = skills.map((s) => `- **${s.name}** — ${s.description} (\`${s.filePath}\`)`);
     parts.push(
-      `## Skills\nReference documents available via the \`read\` tool:\n${lines.join("\n")}`,
+      `## Skills\nReference documents available via the \`read\` tool:\n${lines.join("\n")}\n\nYou can create your own skills as markdown files in your workspace \`skills/\` directory with \`name\` and \`description\` frontmatter fields.`,
     );
   }
 
