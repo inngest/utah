@@ -52,18 +52,34 @@ so each window's realtime stream only carries its own replies.
 
 ## Commands
 
-| Command          | Action                                 |
-| ---------------- | -------------------------------------- |
-| `/clear`, `/new` | end this session and start a fresh one |
-| `/sessions`      | list known sessions                    |
-| `/help`          | show help                              |
-| `/exit`, `/quit` | quit                                   |
+| Command          | Action                                      |
+| ---------------- | ------------------------------------------- |
+| `/clear`, `/new` | end this session and start a fresh one      |
+| `/sessions`      | list known sessions                         |
+| `/bell [on/off]` | toggle the sound played when a run finishes |
+| `/help`          | show help                                   |
+| `/exit`, `/quit` | quit                                        |
 
 ## Keys
 
+- `Enter` — send · `Shift+Enter` — insert a newline (multi-line input)
 - `Ctrl+C` — clear the input (press again on an empty line to exit)
-- `Ctrl+L` — redraw · `Ctrl+U` — clear line
-- `↑` / `↓` — input history · `PgUp` / `PgDn` — scroll the transcript
+- `Ctrl+L` — redraw · `Ctrl+U` — clear line · `Ctrl+A` / `Ctrl+E` — line start/end
+- `↑` / `↓` — move between input lines, then recall input history
+- Mouse wheel / `PgUp` / `PgDn` — scroll the transcript back through the conversation
+
+Multi-line input grows as you type and the transcript shrinks to fit. The view
+stays put when you scroll up while the agent is still replying — it no longer
+jumps to the bottom on each new chunk.
+
+> **Shift+Enter** relies on the terminal reporting a distinct sequence for it
+> (via CSI-u or xterm `modifyOtherKeys`, both of which the TUI enables). If your
+> terminal collapses Shift+Enter to a plain Enter, use `Ctrl+J` for a newline —
+> it always works.
+
+When a run finishes, the TUI rings the terminal bell so you get a notification
+even when the window is in the background (like Claude Code). Turn it off with
+`/bell off`.
 
 ## Troubleshooting
 

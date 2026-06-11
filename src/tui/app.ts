@@ -56,6 +56,8 @@ export class App {
   /** Bumped to invalidate the running subscribe loop (e.g. on /clear or exit). */
   private subGen = 0;
   private stopped = false;
+  /** Ring the terminal bell when a run finishes (toggle with /bell). */
+  private bellEnabled = true;
 
   constructor() {
     this.tui = new Tui("Utah", {
@@ -139,6 +141,7 @@ export class App {
       this.tui.appendAssistant(reply.content);
       if (reply.final) {
         this.tui.setThinking(false);
+        if (this.bellEnabled) this.tui.bell(); // notify that the run is done
         void appendTranscript(this.session.id, "assistant", reply.content);
       }
     } else if (message.topic === "status") {
@@ -216,6 +219,12 @@ export class App {
         this.tui.addMessage("system", body || "No sessions yet.");
         break;
       }
+      case "bell": {
+        const arg = rest[0]?.toLowerCase();
+        this.bellEnabled = arg === "on" ? true : arg === "off" ? false : !this.bellEnabled;
+        this.tui.addMessage("system", `Notification bell ${this.bellEnabled ? "on" : "off"}.`);
+        break;
+      }
       case "help":
         this.tui.addMessage(
           "system",
@@ -223,10 +232,12 @@ export class App {
             "Commands:",
             "  /clear, /new   end this session and start a fresh one",
             "  /sessions      list known sessions",
+            "  /bell [on|off] toggle the done-notification sound",
             "  /help          show this help",
             "  /exit, /quit   quit",
             "",
-            "Keys: Ctrl+C clear input (twice to exit) · Ctrl+L redraw · ↑/↓ history · PgUp/PgDn scroll",
+            "Keys: Enter send · Shift+Enter newline · Ctrl+C clear (twice to exit)",
+            "      Ctrl+L redraw · ↑/↓ history · mouse wheel / PgUp / PgDn scroll",
           ].join("\n"),
         );
         break;

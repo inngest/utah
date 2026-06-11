@@ -12,6 +12,7 @@
 import { App } from "./app.ts";
 import { listSessions } from "./state.ts";
 import { installConsoleCapture } from "./log.ts";
+import { DISABLE as INPUT_MODES_OFF } from "./input.ts";
 
 async function main() {
   if (!process.stdin.isTTY) {
@@ -35,7 +36,7 @@ async function main() {
 
 main().catch((err) => {
   // Restore the terminal before reporting (App.start may have failed early).
-  process.stdout.write("\x1b[?25h\x1b[?1049l");
+  process.stdout.write(INPUT_MODES_OFF + "\x1b[?25h\x1b[?1049l");
   console.error("Fatal error starting TUI:", err);
   process.exit(1);
 });

@@ -10,8 +10,8 @@
  * whole screen, which keeps the spinner from flickering.
  */
 
-import readline from "node:readline";
 import { renderMarkdown } from "./markdown.ts";
+import { InputReader, type Key } from "./input.ts";
 
 // --- ANSI helpers ---
 const ESC = "\x1b[";
@@ -65,6 +65,18 @@ function wrap(text: string, width: number): string[] {
   return out;
 }
 
+/**
+ * Hard-wrap a single line into fixed-width chunks (no word breaking). Used for
+ * the input editor, where char-exact chunks keep the cursor math simple.
+ * Returns at least one (possibly empty) chunk.
+ */
+function hardWrap(text: string, width: number): string[] {
+  if (text.length === 0) return [""];
+  const out: string[] = [];
+  for (let i = 0; i < text.length; i += width) out.push(text.slice(i, i + width));
+  return out;
+}
+
 export class Tui {
   private messages: UiMessage[] = [];
   private input = "";
@@ -74,37 +86,45 @@ export class Tui {
   private spinnerFrame = 0;
   private spinnerTimer: ReturnType<typeof setInterval> | null = null;
   private scrollOffset = 0; // lines scrolled up from the bottom; 0 = pinned
+  private lastTotalLines = 0; // transcript line count at last render, for scroll anchoring
+  private viewHeight = 10; // transcript viewport height from last render, for page scrolling
   private history: string[] = [];
   private historyIndex = -1; // -1 = editing fresh input
   private draft = "";
   private exitArmed = false; // ctrl+c on empty input arms a second-press exit
   private statusHint = "";
-  private rl: readline.Interface | null = null;
+  private input_: InputReader;
 
   constructor(
     private header: string,
     private cb: TuiCallbacks,
-  ) {}
+  ) {
+    this.input_ = new InputReader({
+      onKey: this.onKey,
+      onText: (text) => this.insertText(text),
+      onWheel: (dir) => this.scroll(dir === -1 ? 3 : -3),
+    });
+  }
 
   // --- lifecycle ---
 
   start(): void {
     process.stdout.write(ALT_SCREEN_ON + HIDE_CURSOR);
-    readline.emitKeypressEvents(process.stdin);
-    if (process.stdin.isTTY) process.stdin.setRawMode(true);
-    process.stdin.resume();
-    process.stdin.on("keypress", this.onKeypress);
+    this.input_.start();
     process.stdout.on("resize", this.render);
     this.render();
   }
 
   stop(): void {
     if (this.spinnerTimer) clearInterval(this.spinnerTimer);
-    process.stdin.off("keypress", this.onKeypress);
     process.stdout.off("resize", this.render);
-    if (process.stdin.isTTY) process.stdin.setRawMode(false);
-    process.stdin.pause();
+    this.input_.stop();
     process.stdout.write(SHOW_CURSOR + ALT_SCREEN_OFF);
+  }
+
+  /** Ring the terminal bell (e.g. when a run finishes). */
+  bell(): void {
+    process.stdout.write("\x07");
   }
 
   // --- public mutators (called by app on realtime / commands) ---
@@ -116,7 +136,9 @@ export class Tui {
 
   addMessage(role: Role, content: string): void {
     this.messages.push({ role, content });
-    this.scrollOffset = 0;
+    // A line the user just typed snaps the view back to the bottom; agent and
+    // system output respects an active scrollback position (see render()).
+    if (role === "user") this.scrollOffset = 0;
     this.render();
   }
 
@@ -132,13 +154,13 @@ export class Tui {
     } else {
       this.messages.push({ role: "assistant", content: text });
     }
-    this.scrollOffset = 0;
     this.render();
   }
 
   clearMessages(): void {
     this.messages = [];
     this.scrollOffset = 0;
+    this.lastTotalLines = 0;
     this.render();
   }
 
@@ -158,10 +180,9 @@ export class Tui {
     this.render();
   }
 
-  // --- keypress handling ---
+  // --- key handling ---
 
-  private onKeypress = (str: string | undefined, key: readline.Key): void => {
-    if (!key) return;
+  private onKey = (key: Key): void => {
     const ctrl = key.ctrl === true;
     const name = key.name;
 
@@ -187,13 +208,20 @@ export class Tui {
     if (ctrl && name === "d") return this.cb.onExit();
     if (ctrl && name === "l") return this.render();
     if (ctrl && name === "u") return this.setInput("", 0);
-    if (ctrl && name === "a") return this.moveCursor(0, true);
-    if (ctrl && name === "e") return this.moveCursor(this.input.length, true);
+    if (ctrl && name === "a") return this.moveCursor(this.lineStart());
+    if (ctrl && name === "e") return this.moveCursor(this.lineEnd());
+
+    // Shift+Enter (and Alt+Enter / Ctrl+J) insert a newline; plain Enter submits.
+    if ((name === "return" || name === "enter") && (key.shift || key.meta)) {
+      return this.insertText("\n");
+    }
 
     switch (name) {
       case "return":
       case "enter":
         return this.submit();
+      case "newline":
+        return this.insertText("\n");
       case "backspace":
         if (this.cursor > 0) {
           this.setInput(
@@ -213,29 +241,28 @@ export class Tui {
       case "right":
         return this.moveCursor(this.cursor + 1);
       case "home":
-        return this.moveCursor(0);
+        return this.moveCursor(this.lineStart());
       case "end":
-        return this.moveCursor(this.input.length);
+        return this.moveCursor(this.lineEnd());
       case "up":
-        return this.recallHistory(-1);
+        return this.onUp();
       case "down":
-        return this.recallHistory(1);
+        return this.onDown();
       case "pageup":
-        this.scrollOffset += 5;
-        return this.render();
+        return this.scroll(Math.max(1, this.viewHeight - 1));
       case "pagedown":
-        this.scrollOffset = Math.max(0, this.scrollOffset - 5);
-        return this.render();
-    }
-
-    // Printable input (including pasted runs). Reject control characters.
-    if (str && !ctrl && !key.meta && !/[\x00-\x1f]/.test(str)) {
-      this.setInput(
-        this.input.slice(0, this.cursor) + str + this.input.slice(this.cursor),
-        this.cursor + str.length,
-      );
+        return this.scroll(-Math.max(1, this.viewHeight - 1));
     }
   };
+
+  /** Insert printable / pasted text (newlines allowed) at the cursor. */
+  private insertText(text: string): void {
+    const clean = text.replace(/\r\n?/g, "\n").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+    if (!clean) return;
+    this.input = this.input.slice(0, this.cursor) + clean + this.input.slice(this.cursor);
+    this.cursor += clean.length;
+    this.render();
+  }
 
   private setInput(value: string, cursor: number): void {
     this.input = value;
@@ -246,6 +273,44 @@ export class Tui {
   private moveCursor(to: number, silent = false): void {
     this.cursor = Math.max(0, Math.min(to, this.input.length));
     if (!silent) this.render();
+  }
+
+  /** Offset of the start of the logical line the cursor is on. */
+  private lineStart(): number {
+    return this.input.lastIndexOf("\n", this.cursor - 1) + 1;
+  }
+
+  /** Offset of the end of the logical line the cursor is on. */
+  private lineEnd(): number {
+    const nl = this.input.indexOf("\n", this.cursor);
+    return nl === -1 ? this.input.length : nl;
+  }
+
+  /** Up arrow: move up a line within multi-line input, else recall history. */
+  private onUp(): void {
+    const start = this.lineStart();
+    if (start === 0) return this.recallHistory(-1);
+    const col = this.cursor - start;
+    const prevStart = this.input.lastIndexOf("\n", start - 2) + 1;
+    const prevLen = start - 1 - prevStart;
+    this.moveCursor(prevStart + Math.min(col, prevLen));
+  }
+
+  /** Down arrow: move down a line within multi-line input, else recall history. */
+  private onDown(): void {
+    const end = this.lineEnd();
+    if (end === this.input.length) return this.recallHistory(1);
+    const col = this.cursor - this.lineStart();
+    const nextStart = end + 1;
+    const nextEnd = this.input.indexOf("\n", nextStart);
+    const nextLen = (nextEnd === -1 ? this.input.length : nextEnd) - nextStart;
+    this.moveCursor(nextStart + Math.min(col, nextLen));
+  }
+
+  /** Scroll the transcript by `delta` lines (positive = back/up). */
+  private scroll(delta: number): void {
+    this.scrollOffset = Math.max(0, this.scrollOffset + delta);
+    this.render();
   }
 
   private recallHistory(dir: -1 | 1): void {
@@ -289,8 +354,14 @@ export class Tui {
     const rows = process.stdout.rows || 24;
     const contentWidth = Math.max(20, cols - 2);
 
-    // Layout: header (1), transcript (rows-4), separator (1), status (1), input (1)
-    const transcriptHeight = Math.max(1, rows - 4);
+    // The input grows with its content; cap it so the transcript keeps room.
+    const maxInputRows = Math.max(1, Math.min(rows - 4, Math.max(3, Math.floor(rows / 3))));
+    const input = this.renderInputBlock(cols, maxInputRows);
+    const inputHeight = input.lines.length;
+
+    // Layout: header (1), transcript, separator (1), status (1), input (inputHeight).
+    const transcriptHeight = Math.max(1, rows - 3 - inputHeight);
+    this.viewHeight = transcriptHeight;
 
     // Build all transcript lines.
     const lines: string[] = [];
@@ -301,6 +372,13 @@ export class Tui {
       }
       lines.push("");
     }
+
+    // When scrolled up, hold the viewport on the same content as new lines are
+    // appended below (rather than letting it drift toward the bottom).
+    if (this.scrollOffset > 0 && lines.length > this.lastTotalLines) {
+      this.scrollOffset += lines.length - this.lastTotalLines;
+    }
+    this.lastTotalLines = lines.length;
 
     // Viewport: show the tail, honoring scrollOffset (clamped).
     const maxOffset = Math.max(0, lines.length - transcriptHeight);
@@ -316,16 +394,20 @@ export class Tui {
     for (const l of visible) frame.push(l);
     frame.push(`${DIM}${"─".repeat(cols)}${RESET}`);
     frame.push(this.statusLine(cols));
+    for (const l of input.lines) frame.push(l);
 
-    const { line: inputLine, cursorCol } = this.inputLine(cols);
-    frame.push(inputLine);
+    // Cursor's terminal position: input block starts right after header +
+    // transcript + separator + status.
+    const inputStartRow = 1 + transcriptHeight + 1 + 1; // 0-based frame index
+    const cursorRow = inputStartRow + input.cursorRow + 1; // 1-based terminal row
+    const cursorCol = input.cursorCol;
 
     // Write the whole frame at once: home, then each line + erase-to-EOL.
     let out = HIDE_CURSOR + `${ESC}H`;
     out += frame.map((l) => l + `${ESC}K`).join("\r\n");
     out += `${ESC}J`; // clear anything below
     // Place the real cursor on the input line and reveal it.
-    out += `${ESC}${rows};${cursorCol}H` + SHOW_CURSOR;
+    out += `${ESC}${cursorRow};${cursorCol}H` + SHOW_CURSOR;
     process.stdout.write(out);
   };
 
@@ -372,18 +454,63 @@ export class Tui {
         cols,
       );
     }
-    const hint = this.scrollOffset > 0 ? "↑ scrolled — PgDn to return" : "/help for commands";
+    const hint =
+      this.scrollOffset > 0
+        ? "↑ scrolled — wheel/PgDn to return"
+        : "/help for commands · Shift+Enter for newline";
     return this.truncate(`${DIM}${hint}${RESET}`, cols);
   }
 
-  private inputLine(cols: number): { line: string; cursorCol: number } {
-    const prompt = `${GREEN}❯ ${RESET}`;
-    const promptWidth = 2; // "❯ "
-    const avail = Math.max(1, cols - promptWidth);
-    const startIdx = this.cursor < avail ? 0 : this.cursor - avail + 1;
-    const visible = this.input.slice(startIdx, startIdx + avail);
-    const cursorCol = promptWidth + (this.cursor - startIdx) + 1; // 1-based column
-    return { line: prompt + visible, cursorCol };
+  /**
+   * Render the input buffer as a (possibly multi-line) block, returning the
+   * physical lines plus where the cursor lands within them. Each logical line
+   * (split on "\n") is hard-wrapped to the available width; the prompt "❯ "
+   * leads the first row and continuation rows are indented to match. If the
+   * block is taller than `maxRows`, a window around the cursor is shown.
+   */
+  private renderInputBlock(
+    cols: number,
+    maxRows: number,
+  ): { lines: string[]; cursorRow: number; cursorCol: number } {
+    const promptWidth = 2; // "❯ " / "  "
+    const width = Math.max(1, cols - promptWidth);
+
+    const logical = this.input.split("\n");
+    const rows: string[] = [];
+    let cursorRow = 0;
+    let cursorCol = promptWidth + 1;
+    let consumed = 0; // chars before the start of the current logical line
+
+    for (const text of logical) {
+      const chunks = hardWrap(text, width);
+      const firstRow = rows.length;
+      for (const chunk of chunks) rows.push(chunk);
+
+      // Is the cursor inside this logical line? (inclusive of its end)
+      if (this.cursor >= consumed && this.cursor <= consumed + text.length) {
+        const off = this.cursor - consumed;
+        const chunkIdx = Math.min(Math.floor(off / width), chunks.length - 1);
+        cursorRow = firstRow + chunkIdx;
+        cursorCol = promptWidth + (off - chunkIdx * width) + 1;
+      }
+      consumed += text.length + 1; // + the "\n"
+    }
+
+    // Window the rows so the cursor row stays visible.
+    let top = 0;
+    if (rows.length > maxRows) {
+      top = Math.max(0, Math.min(cursorRow - maxRows + 1, rows.length - maxRows));
+      if (cursorRow < top) top = cursorRow;
+    }
+    const windowRows = rows.slice(top, top + Math.min(maxRows, rows.length));
+
+    const lines = windowRows.map((row, idx) => {
+      const lead = top + idx === 0 ? `${GREEN}❯ ${RESET}` : "  ";
+      return lead + row;
+    });
+    if (lines.length === 0) lines.push(`${GREEN}❯ ${RESET}`);
+
+    return { lines, cursorRow: cursorRow - top, cursorCol };
   }
 
   /** Truncate a (possibly ANSI-colored) string to a visible width budget. */
