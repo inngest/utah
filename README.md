@@ -21,6 +21,81 @@ Channel (e.g. Telegram) → Inngest Cloud (webhook + transform) → WebSocket �
 
 The worker connects to Inngest Cloud via WebSocket. No public endpoint. No ngrok. No VPS. Messages flow through Inngest as events, and the agent processes them locally with full filesystem access.
 
+## Sidecar: Orchestration-Aware Agent Loops
+
+The core agent handles conversations. But conversations are ephemeral — the agent forgets, the process restarts, the context window rolls over. The sidecar is what makes Utah's output durable.
+
+A separate process (`utah-sidecar`) dynamically loads Inngest functions from disk, connects to Inngest Cloud via WebSocket, and runs them independently. The agent can write a new `.ts` file to the functions directory and the sidecar hot-reloads it automatically — no restart, no deploy, no human intervention.
+
+The key idea: **the agent doesn't just run inside loops — it authors new loops** and deploys them to the orchestration engine. Each deployed function is a durable skill that runs on its own schedule, with its own retry logic, completely independent of whether the agent is in a conversation.
+
+```
+┌─────────────────────┐       ┌───────────────────────┐
+│   Core Agent        │       │   Sidecar             │
+│   app: "ai-agent"   │       │   app: "utah-sidecar" │
+│                     │       │                       │
+│   handleMessage     │       │   workspace/functions/│
+│   sendReply         │       │     *.ts (dynamic)    │
+│   subAgent          │       │   + heartbeat (auto)  │
+│   etc.              │       │   + file watcher      │
+└────────┬────────────┘       └────────┬──────────────┘
+         │                             │
+         │    connect() via WebSocket  │
+         └──────────┬──────────────────┘
+                    │
+           ┌────────▼────────┐
+           │  Inngest Cloud  │
+           │  events, crons, │
+           │  retries, state │
+           └─────────────────┘
+```
+
+Both processes connect to Inngest independently. They share nothing except the event bus.
+
+### How it works
+
+1. The sidecar reads `workspace/functions/*.ts`, dynamically imports each file, and registers the exported Inngest functions
+2. A `fs.watch()` monitors the directory — on any change, a 2-second debounce fires, the existing WebSocket closes, functions are re-imported with cache-busting, and a new connection opens
+3. A heartbeat function is auto-injected (runs every 30 minutes) so the sidecar always has at least one registered function
+4. No process restart needed — the agent writes a file, the sidecar picks it up
+
+### The agent writes its own skills
+
+The agent can author new Inngest functions — cron jobs, event handlers, multi-step workflows — by writing a `.ts` file to `workspace/functions/`. The sidecar deploys them automatically.
+
+Some example functions that the main agent might write to extend itself: `morning-triage`, `daily-meeting-digest`, `nightly-workspace-commit`, `weekly-review`. You can also create "loops" with review functions that use LLMs to review and iterate on functions, for example: `inbox-triage-review`, `cold-email-learner`.
+
+Each function is durable — retried on failure, observable in the Inngest dashboard, independently scheduled. Skills compound. The agent builds infrastructure for itself.
+
+### Agent skills as persistent knowledge
+
+[Agent skills](https://agentskills.io/) are markdown reference docs (with `name`/`description` frontmatter) that appear in the agent's system prompt. The agent can create its own skills to persist knowledge across conversations.
+
+This creates a self-referential system:
+
+- The **Inngest Functions** skill teaches the agent how to write sidecar functions (templates, triggers, step API, best practices)
+- The **Sidecar Management** skill teaches file operations for managing the functions directory
+- When the agent learns a new pattern, it can write a new skill _and_ a new function — persisting both the knowledge and the automation
+
+The agent is ephemeral. Its output is durable.
+
+### Communication
+
+Sidecar functions talk back to the main agent by sending `agent.message.received` events:
+
+```typescript
+await step.sendEvent("alert-agent", {
+  name: "agent.message.received",
+  data: {
+    channel: "system",
+    sessionKey: "system-alerts",
+    message: "Alert: something needs attention",
+  },
+});
+```
+
+This means a cron job can monitor something, detect a problem, and start a conversation with the agent — which can then use its tools to investigate and respond. The loops feed each other.
+
 ## Prerequisites
 
 - **Node.js 23+** (uses native TypeScript strip-types)
