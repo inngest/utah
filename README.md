@@ -30,8 +30,8 @@ A separate process (`utah-sidecar`) dynamically loads Inngest functions from dis
 The key idea: **the agent doesn't just run inside loops — it authors new loops** and deploys them to the orchestration engine. Each deployed function is a durable skill that runs on its own schedule, with its own retry logic, completely independent of whether the agent is in a conversation.
 
 ```
-┌─────────────────────┐       ┌─────────────────────┐
-│   Core Agent        │       │   Sidecar            │
+┌─────────────────────┐       ┌───────────────────────┐
+│   Core Agent        │       │   Sidecar             │
 │   app: "ai-agent"   │       │   app: "utah-sidecar" │
 │                     │       │                       │
 │   handleMessage     │       │   workspace/functions/│
@@ -63,24 +63,16 @@ Both processes connect to Inngest independently. They share nothing except the e
 
 The agent can author new Inngest functions — cron jobs, event handlers, multi-step workflows — by writing a `.ts` file to `workspace/functions/`. The sidecar deploys them automatically.
 
-Current deployed functions:
-
-| Function | Type | Purpose |
-|----------|------|---------|
-| `morning-triage.ts` | Cron | Morning triage routine |
-| `daily-meeting-digest.ts` | Cron | Daily meeting digest automation |
-| `nightly-workspace-commit.ts` | Cron | Nightly git commit of workspace changes |
-| `weekly-synthesis.ts` | Cron | Weekly synthesis generation |
-| `meeting-theme-tracker.ts` | Event | Meeting theme tracking |
-| `cold-email-learner.ts` | Event | Cold email pattern learning |
+Some example functions that the main agent might write to extend itself: `morning-triage`, `daily-meeting-digest`, `nightly-workspace-commit`, `weekly-review`. You can also create "loops" with review functions that use LLMs to review and iterate on functions, for example: `inbox-triage-review`, `cold-email-learner`.
 
 Each function is durable — retried on failure, observable in the Inngest dashboard, independently scheduled. Skills compound. The agent builds infrastructure for itself.
 
-### Skills as persistent knowledge
+### Agent skills as persistent knowledge
 
-Skills are markdown reference docs (with `name`/`description` frontmatter) that appear in the agent's system prompt. The agent can create its own skills to persist knowledge across conversations.
+[Agent skills](https://agentskills.io/) are markdown reference docs (with `name`/`description` frontmatter) that appear in the agent's system prompt. The agent can create its own skills to persist knowledge across conversations.
 
 This creates a self-referential system:
+
 - The **Inngest Functions** skill teaches the agent how to write sidecar functions (templates, triggers, step API, best practices)
 - The **Sidecar Management** skill teaches file operations for managing the functions directory
 - When the agent learns a new pattern, it can write a new skill _and_ a new function — persisting both the knowledge and the automation
