@@ -237,7 +237,7 @@ export class App {
             "  /exit, /quit   quit",
             "",
             "Keys: Enter send · Shift+Enter newline · Ctrl+C clear (twice to exit)",
-            "      Ctrl+L redraw · ↑/↓ history · mouse wheel / PgUp / PgDn scroll",
+            "      Ctrl+L redraw · ↑/↓ history · scroll/select/click with your terminal",
           ].join("\n"),
         );
         break;

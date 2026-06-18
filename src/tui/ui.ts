@@ -1,13 +1,20 @@
 /**
- * Full-screen terminal UI: a scrolling transcript with a fixed input line.
+ * Inline terminal UI: a transcript that flows into the terminal's normal
+ * scrollback, with a live input prompt pinned to the bottom.
  *
  * No TUI framework — the project runs TypeScript directly via Node's type
  * stripping, which does not transform JSX, so ink/React are out. This is a
  * self-contained renderer built on raw-mode keypress events and ANSI escapes.
  *
- * Each render builds the entire frame and writes it in a single call, clearing
- * each line as it goes (cursor-home + erase-line) rather than clearing the
- * whole screen, which keeps the spinner from flickering.
+ * Rendering model (the same one Claude Code uses): rather than owning the whole
+ * screen via the alternate buffer, finished messages are *committed* — printed
+ * once to the normal terminal buffer, where they become permanent scrollback.
+ * That hands scrolling, text selection, copy, link ⌘-click, and terminal search
+ * back to the terminal, which does them far better than we could. Only a small
+ * "live region" (the input editor + a status line) is redrawn in place at the
+ * bottom: to update it we move the cursor up to its top, clear to end of screen,
+ * and rewrite it. To commit a message we erase the live region, print the
+ * message where it stood, then redraw the live region below it.
  */
 
 import { renderMarkdown } from "./markdown.ts";
@@ -24,18 +31,10 @@ const YELLOW = `${ESC}33m`;
 const MAGENTA = `${ESC}35m`;
 const HIDE_CURSOR = `${ESC}?25l`;
 const SHOW_CURSOR = `${ESC}?25h`;
-const ALT_SCREEN_ON = `${ESC}?1049h`;
-const ALT_SCREEN_OFF = `${ESC}?1049l`;
 
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 export type Role = "user" | "assistant" | "system";
-export interface UiMessage {
-  role: Role;
-  content: string;
-  /** Cached rendered body lines — invalidated when content or width changes. */
-  cache?: { width: number; content: string; lines: string[] };
-}
 
 export interface TuiCallbacks {
   /** A submitted line (already trimmed of trailing newline). May be a /command. */
@@ -78,22 +77,26 @@ function hardWrap(text: string, width: number): string[] {
 }
 
 export class Tui {
-  private messages: UiMessage[] = [];
   private input = "";
   private cursor = 0;
   private thinking = false;
   private thinkingSince = 0;
   private spinnerFrame = 0;
   private spinnerTimer: ReturnType<typeof setInterval> | null = null;
-  private scrollOffset = 0; // lines scrolled up from the bottom; 0 = pinned
-  private lastTotalLines = 0; // transcript line count at last render, for scroll anchoring
-  private viewHeight = 10; // transcript viewport height from last render, for page scrolling
   private history: string[] = [];
   private historyIndex = -1; // -1 = editing fresh input
   private draft = "";
   private exitArmed = false; // ctrl+c on empty input arms a second-press exit
   private statusHint = "";
   private input_: InputReader;
+
+  // Live-region bookkeeping. The live region is the input + status line drawn at
+  // the bottom; everything above it is committed scrollback we never touch again.
+  private liveRows = 0; // physical rows the live region occupied at last draw
+  private liveCaretRow = 0; // caret's row offset from the top of the live region
+  // Whether an assistant turn is "open" — its label has been printed and further
+  // streamed segments append under it without repeating the label.
+  private turnOpen = false;
 
   constructor(
     private header: string,
@@ -102,24 +105,25 @@ export class Tui {
     this.input_ = new InputReader({
       onKey: this.onKey,
       onText: (text) => this.insertText(text),
-      onWheel: (dir) => this.scroll(dir === -1 ? 3 : -3),
     });
   }
 
   // --- lifecycle ---
 
   start(): void {
-    process.stdout.write(ALT_SCREEN_ON + HIDE_CURSOR);
     this.input_.start();
     process.stdout.on("resize", this.render);
-    this.render();
+    this.render(); // draw the initial (empty) prompt
   }
 
   stop(): void {
     if (this.spinnerTimer) clearInterval(this.spinnerTimer);
     process.stdout.off("resize", this.render);
     this.input_.stop();
-    process.stdout.write(SHOW_CURSOR + ALT_SCREEN_OFF);
+    // Erase the live region so the shell prompt lands cleanly under the
+    // transcript, then leave the cursor on a fresh line.
+    process.stdout.write(HIDE_CURSOR + this.clearLiveSeq() + "\r\n" + SHOW_CURSOR);
+    this.liveRows = 0;
   }
 
   /** Ring the terminal bell (e.g. when a run finishes). */
@@ -131,36 +135,39 @@ export class Tui {
 
   setHeader(header: string): void {
     this.header = header;
-    this.render();
+    this.commit([`${BOLD}${CYAN} ${header}${RESET}`, ""]);
   }
 
   addMessage(role: Role, content: string): void {
-    this.messages.push({ role, content });
-    // A line the user just typed snaps the view back to the bottom; agent and
-    // system output respects an active scrollback position (see render()).
-    if (role === "user") this.scrollOffset = 0;
-    this.render();
+    // A fresh user line starts a new turn; the next assistant text reprints its label.
+    if (role === "user") this.turnOpen = false;
+    this.commit(this.messageBlock(role, content));
   }
 
-  /** Append text to the trailing assistant message, or start one. */
+  /** Append a streamed assistant segment, printing the label once per turn. */
   appendAssistant(content: string): void {
     // Chunks from the model often carry leading/trailing newlines; rendering
     // those verbatim shows blank lines under the label, so normalize them.
     const text = content.trim();
     if (!text) return;
-    const last = this.messages[this.messages.length - 1];
-    if (last && last.role === "assistant") {
-      last.content += "\n\n" + text;
-    } else {
-      this.messages.push({ role: "assistant", content: text });
+    const width = this.contentWidth();
+    const block: string[] = [];
+    if (!this.turnOpen) {
+      block.push(this.label("assistant"));
+      this.turnOpen = true;
     }
-    this.render();
+    for (const line of renderMarkdown(text, width)) block.push("  " + line);
+    block.push("");
+    this.commit(block);
   }
 
+  /** /clear: wipe the screen and scrollback for a clean slate. */
   clearMessages(): void {
-    this.messages = [];
-    this.scrollOffset = 0;
-    this.lastTotalLines = 0;
+    this.turnOpen = false;
+    this.liveRows = 0;
+    this.liveCaretRow = 0;
+    // Home, clear screen, clear scrollback (3J), then redraw the prompt at top.
+    process.stdout.write(`${ESC}H${ESC}2J${ESC}3J`);
     this.render();
   }
 
@@ -248,10 +255,8 @@ export class Tui {
         return this.onUp();
       case "down":
         return this.onDown();
-      case "pageup":
-        return this.scroll(Math.max(1, this.viewHeight - 1));
-      case "pagedown":
-        return this.scroll(-Math.max(1, this.viewHeight - 1));
+      // PageUp/PageDown intentionally fall through to the terminal, which scrolls
+      // its own scrollback — the transcript lives there now.
     }
   };
 
@@ -270,9 +275,9 @@ export class Tui {
     this.render();
   }
 
-  private moveCursor(to: number, silent = false): void {
+  private moveCursor(to: number): void {
     this.cursor = Math.max(0, Math.min(to, this.input.length));
-    if (!silent) this.render();
+    this.render();
   }
 
   /** Offset of the start of the logical line the cursor is on. */
@@ -305,12 +310,6 @@ export class Tui {
     const nextEnd = this.input.indexOf("\n", nextStart);
     const nextLen = (nextEnd === -1 ? this.input.length : nextEnd) - nextStart;
     this.moveCursor(nextStart + Math.min(col, nextLen));
-  }
-
-  /** Scroll the transcript by `delta` lines (positive = back/up). */
-  private scroll(delta: number): void {
-    this.scrollOffset = Math.max(0, this.scrollOffset + delta);
-    this.render();
   }
 
   private recallHistory(dir: -1 | 1): void {
@@ -349,67 +348,84 @@ export class Tui {
 
   // --- rendering ---
 
+  private contentWidth(): number {
+    const cols = process.stdout.columns || 80;
+    return Math.max(20, cols - 2) - 2; // page margin, then the "  " body indent
+  }
+
+  /** Build the committed lines for a finished message: a label then its body. */
+  private messageBlock(role: Role, content: string): string[] {
+    const width = this.contentWidth();
+    const body =
+      role === "assistant"
+        ? renderMarkdown(content, width)
+        : role === "system"
+          ? wrap(content, width).map((l) => `${YELLOW}${l}${RESET}`)
+          : wrap(content, width);
+    return [this.label(role), ...body.map((l) => "  " + l), ""];
+  }
+
+  /**
+   * Print a block of lines to the normal terminal buffer (permanent scrollback),
+   * then redraw the live region below it. Erases the current live region first
+   * so the block lands where the prompt stood.
+   */
+  private commit(block: string[]): void {
+    let out = HIDE_CURSOR + this.clearLiveSeq();
+    // After clearLiveSeq the cursor sits at column 0 where the live region began.
+    out += "\r" + block.map((l) => l + `${ESC}K`).join("\r\n");
+    if (block.length) out += "\r\n";
+    this.liveRows = 0;
+    this.liveCaretRow = 0;
+    out += this.drawRegionSeq() + SHOW_CURSOR;
+    process.stdout.write(out);
+  }
+
+  /** Redraw the live region in place (input + status). */
   private render = (): void => {
+    process.stdout.write(HIDE_CURSOR + this.clearLiveSeq() + this.drawRegionSeq() + SHOW_CURSOR);
+  };
+
+  /**
+   * Escape sequence that erases the current live region, leaving the cursor at
+   * column 0 of the row where the region began (ready to draw or commit there).
+   */
+  private clearLiveSeq(): string {
+    if (this.liveRows === 0) return "";
+    let s = "";
+    if (this.liveCaretRow > 0) s += `${ESC}${this.liveCaretRow}A`; // up to the region's top row
+    s += "\r" + `${ESC}0J`; // column 0, then clear to end of screen
+    return s;
+  }
+
+  /**
+   * Escape sequence that draws the live region at the cursor's current row and
+   * leaves the cursor at the input caret. Updates liveRows / liveCaretRow.
+   */
+  private drawRegionSeq(): string {
     const cols = process.stdout.columns || 80;
     const rows = process.stdout.rows || 24;
-    const contentWidth = Math.max(20, cols - 2);
-
-    // The input grows with its content; cap it so the transcript keeps room.
-    const maxInputRows = Math.max(1, Math.min(rows - 4, Math.max(3, Math.floor(rows / 3))));
+    // Let the input grow, but never so tall that the live region can't fit on
+    // screen (we move the cursor relative to its top, which must stay visible).
+    const maxInputRows = Math.max(
+      1,
+      Math.min(Math.max(1, rows - 2), Math.max(3, Math.floor(rows / 3))),
+    );
     const input = this.renderInputBlock(cols, maxInputRows);
-    const inputHeight = input.lines.length;
+    const region = [...input.lines, this.statusLine(cols)];
 
-    // Layout: header (1), transcript, separator (1), status (1), input (inputHeight).
-    const transcriptHeight = Math.max(1, rows - 3 - inputHeight);
-    this.viewHeight = transcriptHeight;
+    const caretRow = input.cursorRow;
+    const caretCol = input.cursorCol;
+    let s = "\r" + region.map((l) => l + `${ESC}K`).join("\r\n");
+    // Cursor is now at the end of the last region row; move it to the caret.
+    const lastRow = region.length - 1;
+    if (lastRow > caretRow) s += `${ESC}${lastRow - caretRow}A`;
+    s += `${ESC}${caretCol}G`; // absolute column
 
-    // Build all transcript lines.
-    const lines: string[] = [];
-    for (const msg of this.messages) {
-      lines.push(this.label(msg.role));
-      for (const bodyLine of this.renderBody(msg, contentWidth - 2)) {
-        lines.push("  " + bodyLine);
-      }
-      lines.push("");
-    }
-
-    // When scrolled up, hold the viewport on the same content as new lines are
-    // appended below (rather than letting it drift toward the bottom).
-    if (this.scrollOffset > 0 && lines.length > this.lastTotalLines) {
-      this.scrollOffset += lines.length - this.lastTotalLines;
-    }
-    this.lastTotalLines = lines.length;
-
-    // Viewport: show the tail, honoring scrollOffset (clamped).
-    const maxOffset = Math.max(0, lines.length - transcriptHeight);
-    this.scrollOffset = Math.min(this.scrollOffset, maxOffset);
-    const end = lines.length - this.scrollOffset;
-    const start = Math.max(0, end - transcriptHeight);
-    const visible = lines.slice(start, end);
-    while (visible.length < transcriptHeight) visible.unshift(""); // top-pad
-
-    // Compose the frame.
-    const frame: string[] = [];
-    frame.push(this.truncate(`${BOLD}${CYAN} ${this.header}${RESET}`, cols, true));
-    for (const l of visible) frame.push(l);
-    frame.push(`${DIM}${"─".repeat(cols)}${RESET}`);
-    frame.push(this.statusLine(cols));
-    for (const l of input.lines) frame.push(l);
-
-    // Cursor's terminal position: input block starts right after header +
-    // transcript + separator + status.
-    const inputStartRow = 1 + transcriptHeight + 1 + 1; // 0-based frame index
-    const cursorRow = inputStartRow + input.cursorRow + 1; // 1-based terminal row
-    const cursorCol = input.cursorCol;
-
-    // Write the whole frame at once: home, then each line + erase-to-EOL.
-    let out = HIDE_CURSOR + `${ESC}H`;
-    out += frame.map((l) => l + `${ESC}K`).join("\r\n");
-    out += `${ESC}J`; // clear anything below
-    // Place the real cursor on the input line and reveal it.
-    out += `${ESC}${cursorRow};${cursorCol}H` + SHOW_CURSOR;
-    process.stdout.write(out);
-  };
+    this.liveRows = region.length;
+    this.liveCaretRow = caretRow;
+    return s;
+  }
 
   private label(role: Role): string {
     switch (role) {
@@ -420,26 +436,6 @@ export class Tui {
       case "system":
         return `${YELLOW}system${RESET}`;
     }
-  }
-
-  /**
-   * Render a message body to wrapped lines, cached per (content, width).
-   * Assistant text is rendered as markdown; user/system stay plain.
-   */
-  private renderBody(msg: UiMessage, width: number): string[] {
-    if (msg.cache && msg.cache.width === width && msg.cache.content === msg.content) {
-      return msg.cache.lines;
-    }
-    let lines: string[];
-    if (msg.role === "assistant") {
-      lines = renderMarkdown(msg.content, width);
-    } else if (msg.role === "system") {
-      lines = wrap(msg.content, width).map((l) => `${YELLOW}${l}${RESET}`);
-    } else {
-      lines = wrap(msg.content, width); // user: plain
-    }
-    msg.cache = { width, content: msg.content, lines };
-    return lines;
   }
 
   private statusLine(cols: number): string {
@@ -454,11 +450,7 @@ export class Tui {
         cols,
       );
     }
-    const hint =
-      this.scrollOffset > 0
-        ? "↑ scrolled — wheel/PgDn to return"
-        : "/help for commands · Shift+Enter for newline";
-    return this.truncate(`${DIM}${hint}${RESET}`, cols);
+    return this.truncate(`${DIM}/help for commands · Shift+Enter for newline${RESET}`, cols);
   }
 
   /**
@@ -514,11 +506,11 @@ export class Tui {
   }
 
   /** Truncate a (possibly ANSI-colored) string to a visible width budget. */
-  private truncate(s: string, max: number, padReset = false): string {
+  private truncate(s: string, max: number): string {
     // We assume our own strings have balanced codes; budget by stripped length.
     const stripped = s.replace(/\x1b\[[0-9;]*m/g, "");
     if (stripped.length <= max) return s;
     // Rare path (very narrow terminals): fall back to stripped truncation.
-    return stripped.slice(0, max) + (padReset ? RESET : "");
+    return stripped.slice(0, max);
   }
 }

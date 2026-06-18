@@ -1,18 +1,17 @@
 /**
  * Raw stdin decoder for the TUI.
  *
- * Why not `readline.emitKeypressEvents`? Two of the features this UI needs rely
- * on escape sequences that Node's readline parser silently ignores:
+ * Why not `readline.emitKeypressEvents`? Shift+Enter for a newline is reported
+ * as CSI-u (`\x1b[13;2u`) or xterm "modifyOtherKeys" (`\x1b[27;2;13~`), neither
+ * of which readline understands — it would leak those byte sequences into the
+ * input as garbage text. So we own the decode loop: enable bracketed-paste +
+ * modifyOtherKeys, and translate raw chunks into key / text events. Partial
+ * escape sequences split across chunks are buffered until they complete.
  *
- *   - Mouse-wheel scrollback — SGR mouse reports (`\x1b[<64;…M`).
- *   - Shift+Enter for a newline — reported as CSI-u (`\x1b[13;2u`) or
- *     xterm "modifyOtherKeys" (`\x1b[27;2;13~`), neither of which readline
- *     understands.
- *
- * readline would leak those byte sequences into the input as garbage text. So
- * we own the decode loop: enable mouse + bracketed-paste + modifyOtherKeys, and
- * translate raw chunks into key / text / wheel events. Partial escape sequences
- * split across chunks are buffered until they complete.
+ * Note: we deliberately do NOT enable mouse tracking. The transcript lives in
+ * the terminal's normal scrollback (see ui.ts), so selection, copy, link
+ * ⌘-click, and wheel scrolling are all handled natively by the terminal —
+ * capturing the mouse would only break them.
  */
 
 /** A decoded key event. `name` is undefined for plain printable text (which is delivered via onText instead). */
@@ -29,17 +28,13 @@ export interface InputHandlers {
   onKey: (key: Key) => void;
   /** Printable input — typed runs and pasted text (may contain newlines). */
   onText: (text: string) => void;
-  /** Mouse wheel: dir -1 = up (scroll back), +1 = down. */
-  onWheel: (dir: -1 | 1) => void;
 }
 
 // Terminal modes we turn on for the session (and must turn back off on exit):
-//   ?1000h  — mouse button events (the wheel reports as buttons 64/65)
-//   ?1006h  — SGR extended mouse coordinates (`\x1b[<b;x;yM`)
 //   ?2004h  — bracketed paste (pasted text wrapped in \x1b[200~ … \x1b[201~)
 //   >4;1m   — modifyOtherKeys=1 so Shift+Enter is distinguishable from Enter
-const ENABLE = "\x1b[?1000h\x1b[?1006h\x1b[?2004h\x1b[>4;1m";
-export const DISABLE = "\x1b[?1000l\x1b[?1006l\x1b[?2004l\x1b[>4m";
+const ENABLE = "\x1b[?2004h\x1b[>4;1m";
+export const DISABLE = "\x1b[?2004l\x1b[>4m";
 
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";
@@ -152,15 +147,6 @@ export class InputReader {
     }
 
     if (rest.startsWith("\x1b[")) {
-      // SGR mouse: \x1b[<button;col;row(M|m). Only the wheel interests us.
-      const mouse = /^\x1b\[<(\d+);\d+;\d+[Mm]/.exec(rest);
-      if (mouse) {
-        const button = parseInt(mouse[1], 10);
-        if (button === 64) this.h.onWheel(-1);
-        else if (button === 65) this.h.onWheel(1);
-        // Other buttons (clicks) are ignored.
-        return mouse[0].length;
-      }
       // Generic CSI: \x1b[ <params> <final>.
       const csi = /^\x1b\[([0-9;:]*)([~A-Za-z])/.exec(rest);
       if (csi) {

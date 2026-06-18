@@ -33,9 +33,16 @@ interface Style {
   strike?: boolean;
   code?: boolean;
   link?: boolean;
+  /** Target URL for a link run — emitted as an OSC 8 hyperlink so it's clickable. */
+  href?: string;
   dim?: boolean;
   color?: string;
 }
+
+// OSC 8 hyperlink: wraps visible text so terminals make it ⌘-clickable while
+// still showing only the label. BEL-terminated form is the widely-supported one.
+const osc8Open = (url: string) => `\x1b]8;;${url}\x07`;
+const OSC8_CLOSE = "\x1b]8;;\x07";
 
 interface Run {
   text: string;
@@ -88,7 +95,7 @@ function parseInline(text: string, base: Style): Run[] {
       index: link.index,
       len: link[0].length,
       inner: link[1],
-      style: { ...base, link: true },
+      style: { ...base, link: true, href: link[2] },
       recurse: false,
     };
   }
@@ -150,13 +157,17 @@ function layout(runs: Run[], width: number): string[] {
     len = 0;
   };
 
+  // Emit a styled word, wrapping it in an OSC 8 hyperlink when the run links out.
+  const styled = (codes: string, text: string, href?: string) =>
+    href ? osc8Open(href) + codes + text + RESET + OSC8_CLOSE : codes + text + RESET;
+
   for (const t of tokens) {
     let word = t.word;
     const codes = codesFor(t.style);
     // Hard-break words longer than the line (e.g. long URLs).
     while (word.length > w) {
       if (len > 0) flush();
-      lines.push(codes + word.slice(0, w) + RESET);
+      lines.push(styled(codes, word.slice(0, w), t.style.href));
       word = word.slice(w);
     }
     const space = len > 0 && !t.glued ? 1 : 0;
@@ -165,7 +176,7 @@ function layout(runs: Run[], width: number): string[] {
       out += " ";
       len += 1;
     }
-    out += codes + word + RESET;
+    out += styled(codes, word, t.style.href);
     len += word.length;
   }
   if (len > 0) flush();
