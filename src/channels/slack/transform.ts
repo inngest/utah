@@ -51,7 +51,8 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
           channelType: e.channel_type, threadTs: thread
         },
         headers,
-      }
+      },
+      meta: { sessions: { conversation_id: "slack-" + ch + "-" + thread } }
     };
   } catch (err) {
     return { name: "slack/transform.failed", data: { error: String(err), raw: evt } };
@@ -81,10 +82,13 @@ interface SlackEvent {
   };
 }
 
-export function transform(
-  evt: SlackEvent,
-):
-  | { id?: string; name: string; data: AgentMessageData | SlackEvent | Record<string, unknown> }
+export function transform(evt: SlackEvent):
+  | {
+      id?: string;
+      name: string;
+      data: AgentMessageData | SlackEvent | Record<string, unknown>;
+      meta?: { sessions: Record<string, string> };
+    }
   | undefined {
   // URL verification is handled by the response function;
   // return a no-op event so the transform doesn't error
@@ -143,5 +147,6 @@ export function transform(
     id: `slack.${event.channel}.${event.ts}`,
     name: "agent.message.received",
     data,
+    meta: { sessions: { conversation_id: sessionKey } },
   };
 }

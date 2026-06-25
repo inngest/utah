@@ -50,7 +50,8 @@ export const TRANSFORM_SOURCE = `function transform(evt, headers, queryParams) {
           } : undefined,
           forumTopicId: msg.message_thread_id
         }
-      }
+      },
+      meta: { sessions: { conversation_id: "telegram-" + chatId } }
     };
   } catch (e) {
     return { name: "telegram/transform.failed", data: { error: String(e), raw: evt } };
@@ -80,7 +81,14 @@ interface TelegramUpdate {
 
 export function transform(
   evt: TelegramUpdate,
-): { id?: string; name: string; data: AgentMessageData } | undefined {
+):
+  | {
+      id?: string;
+      name: string;
+      data: AgentMessageData;
+      meta?: { sessions: Record<string, string> };
+    }
+  | undefined {
   if (!evt.message?.text) return undefined;
 
   const msg = evt.message;
@@ -118,5 +126,6 @@ export function transform(
         forumTopicId: msg.message_thread_id,
       },
     },
+    meta: { sessions: { conversation_id: `telegram-${chatId}` } },
   };
 }
