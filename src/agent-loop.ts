@@ -317,6 +317,7 @@ export function createAgentLoop(
               // it as in-progress text rather than the final answer.
               channelMeta: { ...loopChannel.channelMeta, incremental: true },
             },
+            meta: { sessions: { conversation_id: sessionKey } },
           });
           // Track emitted text so we can exclude it from the final response
           emittedTextParts.push(llmResponse.text);
@@ -340,6 +341,9 @@ export function createAgentLoop(
                 subSessionKey,
                 parentSessionKey: sessionKey,
               },
+              // step.invoke does NOT inherit sessions — pass explicitly so the
+              // sub-agent run nests under the parent conversation.
+              meta: { sessions: { conversation_id: sessionKey } },
             });
             toolResult = {
               result: subResult?.response || "(Sub-agent returned no response)",
@@ -362,6 +366,7 @@ export function createAgentLoop(
                     }
                   : {}),
               },
+              meta: { sessions: { conversation_id: sessionKey } },
             });
             const asyncEventId = asyncEvent?.ids?.[0] || "unknown";
             toolResult = {
@@ -395,6 +400,7 @@ export function createAgentLoop(
                       }
                     : {}),
                 },
+                meta: { sessions: { conversation_id: sessionKey } },
                 ts: scheduledTs,
               });
               const scheduledEventId = scheduledEvent?.ids?.[0] || "unknown";

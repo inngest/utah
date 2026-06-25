@@ -58,6 +58,7 @@ export const handleMessage = inngest.createFunction(
           destination,
           channelMeta,
         },
+        meta: { sessions: { conversation_id: sessionKey } },
       });
     }
 
