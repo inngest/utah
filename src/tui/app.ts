@@ -188,6 +188,8 @@ export class App {
           destination: { chatId: this.session.id },
           channelMeta: {},
         },
+        // Group every run in this conversation under one session in the dashboard.
+        meta: { sessions: { conversation_id: this.session.id } },
       });
       log("sent message", { session: this.session.id, eventIds: ids });
     } catch (err) {

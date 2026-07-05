@@ -21,6 +21,7 @@ export const subAgent = inngest.createFunction(
     const {
       task,
       subSessionKey,
+      parentSessionKey,
       async: isAsync,
       scheduledFor,
       channel,
@@ -69,6 +70,8 @@ ${task}`;
           destination,
           channelMeta: channelMeta || {},
         },
+        // Nest the async reply under the originating conversation.
+        meta: { sessions: { conversation_id: parentSessionKey ?? subSessionKey } },
       });
     }
 
