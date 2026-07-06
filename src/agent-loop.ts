@@ -18,7 +18,7 @@
 
 import { config } from "./config.ts";
 import { callLLM, validateToolArguments, type Message, type TextContent } from "./lib/llm.ts";
-import type { ToolResultMessage, UserMessage } from "@mariozechner/pi-ai";
+import type { ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import { TOOLS, executeTool, type ToolResult } from "./lib/tools.ts";
 import { buildSystemPrompt, buildConversationHistory } from "./lib/context.ts";
 import { ensureWorkspace } from "./lib/memory.ts";

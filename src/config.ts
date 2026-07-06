@@ -1,5 +1,5 @@
 import { resolve } from "path";
-import type { KnownProvider } from "@mariozechner/pi-ai";
+import type { KnownProvider } from "@earendil-works/pi-ai";
 
 export const config = {
   agent: {

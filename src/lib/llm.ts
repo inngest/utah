@@ -5,7 +5,10 @@
  * (Anthropic, OpenAI, Google) with TypeBox-based tool validation.
  */
 
-import { getModel, complete, validateToolArguments } from "@mariozechner/pi-ai";
+import { validateToolArguments } from "@earendil-works/pi-ai";
+// getModel/complete were removed from the pi-ai main entry in 0.80; they now
+// live on the deprecated compat subpath. TODO: migrate to createModels().
+import { getModel, complete } from "@earendil-works/pi-ai/compat";
 import type {
   Tool,
   Message,
@@ -15,7 +18,7 @@ import type {
   KnownProvider,
   Model,
   Api,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { config } from "../config.ts";
 
 export type { Tool, Message, AssistantMessage, TextContent, ToolCall };
