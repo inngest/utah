@@ -21,7 +21,7 @@ export const config = {
   llm: {
     // pi-ai provider/model format — supports "anthropic", "openai", "google"
     provider: (process.env.LLM_PROVIDER || "anthropic") as KnownProvider,
-    model: process.env.AGENT_MODEL || "claude-sonnet-4-20250514",
+    model: process.env.AGENT_MODEL || "claude-sonnet-5",
     // API keys are read from env by pi-ai automatically:
     //   ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY
 
